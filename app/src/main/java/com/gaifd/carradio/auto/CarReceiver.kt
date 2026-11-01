@@ -56,6 +56,7 @@ class CarReceiver : BroadcastReceiver() {
 
     private fun startAutoplay(ctx: Context) {
         val i = Intent(ctx, PlaybackService::class.java).setAction(PlaybackService.ACTION_AUTOPLAY)
+            .putExtra(PlaybackService.EXTRA_FROM_CAR, true)
         try {
             ContextCompat.startForegroundService(ctx, i)
         } catch (e: Exception) {

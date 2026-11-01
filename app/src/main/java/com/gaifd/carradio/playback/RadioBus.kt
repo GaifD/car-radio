@@ -14,13 +14,25 @@ data class RadioUi(
     val offline: Boolean = false,
     val interrupted: Boolean = false,
     val error: String? = null,
+    val note: String? = null,           // спокойное пояснение: «запасная ссылка», «облегчённый поток»
     val codec: String? = null,
-    val bitrateKbps: Int = 0,   // заявленный битрейт потока
-    val rxKbps: Int = 0,        // сколько реально приходит из сети сейчас
+    val bitrateKbps: Int = 0,           // битрейт потока
+    val rxKbps: Int = 0,                // сколько реально приходит из сети
+    val stockingMs: Long = 0,           // > 0 — идёт «Запастись» до этого уровня
+    val highway: Boolean = false,
 )
+
+/** Команды экрана плееру, которых нет у обычного плеера. */
+interface RadioControl {
+    fun stockUp()
+    fun playNow()
+}
 
 object RadioBus {
     val state = MutableStateFlow(RadioUi())
+
+    @Volatile
+    var control: RadioControl? = null
 }
 
 data class TrackInfo(val artist: String?, val title: String)

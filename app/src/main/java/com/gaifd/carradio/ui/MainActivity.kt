@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.companion.AssociationRequest
 import android.companion.BluetoothDeviceFilter
 import android.companion.CompanionDeviceManager
+import android.app.SearchManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentSender
@@ -19,6 +20,7 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -54,7 +57,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.gaifd.carradio.data.History
 import com.gaifd.carradio.data.Prefs
+import com.gaifd.carradio.data.Traffic
 import com.gaifd.carradio.data.Station
 import com.gaifd.carradio.data.StationRepo
 import com.gaifd.carradio.playback.PlaybackService
@@ -76,6 +81,28 @@ class MainActivity : ComponentActivity() {
     private var bluetoothOk by mutableStateOf(true)
     private var carLinked by mutableStateOf(false)
     private var showCarPicker by mutableStateOf(false)
+    private var editStreamsId by mutableStateOf<String?>(null)
+    private var showHistory by mutableStateOf(false)
+
+    private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(StationRepo.exportJson().toByteArray()) }
+            toast("Станции сохранены: ${StationRepo.stations.value.size}")
+        } catch (e: Exception) {
+            toast("Не удалось сохранить: ${e.message}")
+        }
+    }
+    private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+            val n = StationRepo.import(StationRepo.parseExport(text))
+            toast(if (n == 0) "Новых станций в файле нет" else "Добавлено станций: $n")
+        } catch (e: Exception) {
+            toast("Это не файл станций Авторадио")
+        }
+    }
 
     private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { refresh() }
     private val btLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
@@ -96,6 +123,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         StationRepo.init(this)
+        History.init(this)
+        Traffic.init(this)
         autoplayRequested = intent?.getBooleanExtra(EXTRA_AUTOPLAY, false) == true
 
         if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
@@ -281,6 +310,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Найти песню из истории: голосовой/веб-поиск, а если его нет — браузер. */
+    private fun searchTrack(track: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, track))
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(track))))
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     // ---------- UI ----------
@@ -291,6 +332,15 @@ class MainActivity : ComponentActivity() {
         val stations by StationRepo.stations.collectAsState()
         val ui by RadioBus.state.collectAsState()
         val settings by Prefs.settings.collectAsState()
+        val history by History.items.collectAsState()
+
+        if (showHistory) {
+            BackHandler { showHistory = false }
+            Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
+                HistoryScreen(history, onBack = { showHistory = false }, onSearch = ::searchTrack)
+            }
+            return
+        }
 
         Scaffold(
             containerColor = C.bg,
@@ -302,6 +352,7 @@ class MainActivity : ComponentActivity() {
                         stations = stations,
                         ui = ui,
                         settings = settings,
+                        history = history,
                         batteryOk = batteryOk,
                         onFixBattery = ::fixBattery,
                         onPlay = ::playStation,
@@ -309,6 +360,9 @@ class MainActivity : ComponentActivity() {
                         onPrev = { controller?.seekToPreviousMediaItem() },
                         onNext = { controller?.seekToNextMediaItem() },
                         onGoAdd = { tab = 1 },
+                        onEditStreams = { editStreamsId = it.id },
+                        onOpenHistory = { showHistory = true },
+                        onSearchTrack = ::searchTrack,
                     )
                     1 -> SearchScreen(stations, settings)
                     else -> SettingsScreen(
@@ -319,10 +373,14 @@ class MainActivity : ComponentActivity() {
                         onFixBattery = ::fixBattery,
                         onFixNotifications = ::fixNotifications,
                         onAppSettings = ::openAppSettings,
+                        onExport = { exportLauncher.launch("avtoradio-stations.json") },
+                        onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                     )
                 }
             }
         }
+
+        editStreamsId?.let { id -> StreamsDialog(id, onDismiss = { editStreamsId = null }) }
 
         if (showCarPicker) {
             CarPickerDialog(

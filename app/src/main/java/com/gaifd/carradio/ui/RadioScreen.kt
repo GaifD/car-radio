@@ -38,11 +38,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gaifd.carradio.data.HistoryEntry
+import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Settings
 import com.gaifd.carradio.data.Station
 import com.gaifd.carradio.data.StationRepo
+import com.gaifd.carradio.playback.RadioBus
 import com.gaifd.carradio.playback.RadioUi
 
 @Composable
@@ -50,6 +54,7 @@ fun RadioScreen(
     stations: List<Station>,
     ui: RadioUi,
     settings: Settings,
+    history: List<HistoryEntry>,
     batteryOk: Boolean,
     onFixBattery: () -> Unit,
     onPlay: (Station) -> Unit,
@@ -57,6 +62,9 @@ fun RadioScreen(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onGoAdd: () -> Unit,
+    onEditStreams: (Station) -> Unit,
+    onOpenHistory: () -> Unit,
+    onSearchTrack: (String) -> Unit,
 ) {
     val current = stations.firstOrNull { it.id == ui.stationId } ?: stations.firstOrNull()
     Column(
@@ -81,20 +89,30 @@ fun RadioScreen(
                     fontSize = 13.sp, color = C.soft, lineHeight = 18.sp,
                 )
                 Spacer(Modifier.height(12.dp))
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(C.accent)
-                        .clickable(onClick = onGoAdd)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Text("Добавить станции", color = C.bg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
+                PillButton("Добавить станции", filled = true, onClick = onGoAdd)
             }
         } else {
             NowPlaying(current, ui, settings, onToggle, onPrev, onNext)
             SectionTitle("Мои станции", "удерживай — меню")
-            StationGrid(stations, ui.stationId, onPlay)
+            StationGrid(stations, ui.stationId, onPlay, onEditStreams)
+            if (history.isNotEmpty()) {
+                SectionTitle("Недавно играло", null)
+                Card(padding = 14) {
+                    history.take(5).forEachIndexed { i, h ->
+                        HistoryRow(h, divider = i < minOf(4, history.size - 1), onSearch = onSearchTrack)
+                    }
+                    if (history.size > 5) {
+                        Text(
+                            "Вся история (${history.size})",
+                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.accent,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onOpenHistory)
+                                .padding(top = 10.dp, bottom = 2.dp),
+                        )
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -108,6 +126,7 @@ private fun Header(settings: Settings, ui: RadioUi) {
         else -> C.faint
     }
     val status = when {
+        ui.stockingMs > 0 -> "копит запас"
         ui.offline -> "нет связи · играет из буфера"
         ui.interrupted -> "пауза на время звонка"
         ui.playing && ui.loading -> "подключаюсь…"
@@ -120,9 +139,29 @@ private fun Header(settings: Settings, ui: RadioUi) {
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
         Spacer(Modifier.width(10.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             OneLine(settings.carName ?: "Авторадио", 15, weight = FontWeight.Bold)
             Text(status, fontSize = 12.sp, color = C.muted)
+        }
+        // Быстрый переключатель «Трассы» прямо на главном экране.
+        Box(
+            Modifier
+                .heightIn(min = 36.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .then(
+                    if (settings.highway) Modifier.background(C.accentBg)
+                    else Modifier.border(1.dp, C.border, RoundedCornerShape(99.dp))
+                )
+                .clickable { Prefs.update { it.copy(highway = !it.highway) } }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (settings.highway) "ТРАССА · ВКЛ" else "Трасса",
+                fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                color = if (settings.highway) C.accent else C.soft,
+                letterSpacing = if (settings.highway) 0.5.sp else 0.sp,
+            )
         }
     }
 }
@@ -139,6 +178,7 @@ private fun NowPlaying(
     val label: String
     val labelColor: Color
     when {
+        ui.stockingMs > 0 -> { label = "КОПИТ ЗАПАС"; labelColor = C.accent }
         ui.offline -> { label = "НЕТ СВЯЗИ"; labelColor = C.amber }
         ui.playing && ui.loading -> { label = "ЗАГРУЗКА"; labelColor = C.soft }
         ui.playing -> { label = "В ЭФИРЕ"; labelColor = C.accent }
@@ -160,8 +200,7 @@ private fun NowPlaying(
                 Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = labelColor, letterSpacing = 1.sp)
                 Text(
                     st.name, fontFamily = Chakra, fontWeight = FontWeight.Bold, fontSize = 26.sp,
-                    lineHeight = 28.sp, maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    lineHeight = 28.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 OneLine(ui.trackTitle ?: st.genre.ifBlank { " " }, 14, color = C.soft, weight = FontWeight.SemiBold)
                 if (ui.trackArtist != null) OneLine(ui.trackArtist, 13, color = C.muted)
@@ -196,20 +235,23 @@ private fun NowPlaying(
 @Composable
 private fun BufferBar(ui: RadioUi, settings: Settings) {
     val sec = (ui.bufferMs / 1000).toInt()
-    val target = (ui.targetMs / 1000).toInt()
+    val stocking = ui.stockingMs > 0
+    val goalMs = if (stocking) ui.stockingMs else ui.targetMs
+    val goal = (goalMs / 1000).toInt()
     val right = when {
+        stocking -> "из $goal с"
         !ui.playing -> ""
         ui.offline -> "хватит ещё на $sec с"
         ui.loading -> "подключаюсь"
-        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $target с" else "запас до $target с"
+        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
         else -> "поток стабилен"
     }
     val color = if (ui.offline) C.amber else C.accent
-    val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
+    val frac = if (goalMs > 0) (ui.bufferMs.toFloat() / goalMs).coerceIn(0f, 1f) else 0f
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            Text("Буфер ", fontSize = 12.sp, color = C.muted)
+            Text(if (stocking) "Копится " else "Буфер ", fontSize = 12.sp, color = C.muted)
             Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
             Spacer(Modifier.weight(1f))
             Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
@@ -229,27 +271,58 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
                     .background(color)
             )
         }
+        // «Запастись»: есть смысл, только если до полного запаса далеко.
+        val room = ui.targetMs - ui.bufferMs
+        if (stocking) {
+            PillButton("Играть сейчас", filled = true) { RadioBus.control?.playNow() }
+        } else if (ui.playing && !ui.loading && !ui.offline && room > 8_000) {
+            PillButton("Запастись на ${(ui.targetMs / 1000).toInt()} с — звук прервётся, пока копится", filled = false) {
+                RadioBus.control?.stockUp()
+            }
+        }
     }
 }
 
 /** Формат и битрейт потока + сколько реально приходит из сети. */
 @Composable
 private fun StreamInfo(ui: RadioUi) {
-    if (!ui.playing || ui.loading) return
+    if (!ui.playing || (ui.loading && ui.stockingMs == 0L)) return
     val left = listOfNotNull(
         ui.codec,
         if (ui.bitrateKbps > 0) "${ui.bitrateKbps} kbps" else null,
     ).joinToString(" · ").ifBlank { "поток" }
     // Приходит заметно меньше, чем нужно для звука, — запас тает.
     val slow = ui.offline || (ui.bitrateKbps > 0 && ui.rxKbps < ui.bitrateKbps * 0.85 && ui.bufferMs < ui.targetMs - 2000)
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(left, fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.soft)
-        Spacer(Modifier.weight(1f))
-        Text("приём ", fontSize = 12.sp, color = C.muted)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(left, fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.soft)
+            Spacer(Modifier.weight(1f))
+            Text("приём ", fontSize = 12.sp, color = C.muted)
+            Text(
+                "${ui.rxKbps} kbps",
+                fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold,
+                color = if (slow) C.amber else C.text,
+            )
+        }
+        if (ui.note != null) Text(ui.note, fontSize = 12.sp, color = C.muted)
+    }
+}
+
+@Composable
+fun PillButton(text: String, filled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (filled) Modifier.background(C.accent) else Modifier.border(1.dp, C.border, RoundedCornerShape(12.dp)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(
-            "${ui.rxKbps} kbps",
-            fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold,
-            color = if (slow) C.amber else C.text,
+            text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            color = if (filled) C.bg else C.accent, maxLines = 2,
         )
     }
 }
@@ -268,7 +341,36 @@ private fun RoundButton(size: Int, filled: Boolean, desc: String, onClick: () ->
 }
 
 @Composable
-private fun StationGrid(stations: List<Station>, currentId: String?, onPlay: (Station) -> Unit) {
+fun HistoryRow(h: HistoryEntry, divider: Boolean, onSearch: (String) -> Unit) {
+    val t = com.gaifd.carradio.playback.splitTrack(h.track)
+    val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(h.time))
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .clickable { onSearch(h.track) }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(time, fontSize = 12.sp, fontFamily = Chakra, color = C.muted, modifier = Modifier.width(44.dp))
+            Column(Modifier.weight(1f)) {
+                OneLine(t.title, 14, weight = FontWeight.SemiBold)
+                OneLine(listOfNotNull(t.artist, h.station).joinToString(" · "), 12, color = C.muted)
+            }
+            Icon(Ic.search, contentDescription = "Найти песню", tint = C.accent, modifier = Modifier.size(18.dp))
+        }
+        if (divider) Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(C.line))
+    }
+}
+
+@Composable
+private fun StationGrid(
+    stations: List<Station>,
+    currentId: String?,
+    onPlay: (Station) -> Unit,
+    onEditStreams: (Station) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         stations.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -279,6 +381,7 @@ private fun StationGrid(stations: List<Station>, currentId: String?, onPlay: (St
                         isFirst = stations.firstOrNull()?.id == st.id,
                         isLast = stations.lastOrNull()?.id == st.id,
                         onPlay = { onPlay(st) },
+                        onEditStreams = { onEditStreams(st) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -296,6 +399,7 @@ private fun StationTile(
     isFirst: Boolean,
     isLast: Boolean,
     onPlay: () -> Unit,
+    onEditStreams: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -315,7 +419,9 @@ private fun StationTile(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 OneLine(st.name, 14, weight = FontWeight.Bold)
-                if (st.genre.isNotBlank()) OneLine(st.genre, 11, color = C.muted)
+                val sub = listOf(st.genre, if (st.alts.isNotEmpty()) "+${st.alts.size} ссыл." else "")
+                    .filter { it.isNotBlank() }.joinToString(" · ")
+                if (sub.isNotBlank()) OneLine(sub, 11, color = C.muted)
             }
         }
         DropdownMenu(
@@ -323,6 +429,10 @@ private fun StationTile(
             onDismissRequest = { menu = false },
             modifier = Modifier.background(C.card),
         ) {
+            DropdownMenuItem(
+                text = { Text("Ссылки потока (${st.streams.size})", color = C.text) },
+                onClick = { menu = false; onEditStreams() },
+            )
             if (!isFirst) DropdownMenuItem(
                 text = { Text("Сдвинуть раньше", color = C.text) },
                 onClick = { StationRepo.move(st.id, -1); menu = false },

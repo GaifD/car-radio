@@ -54,6 +54,41 @@ object StationRepo {
         save(list)
     }
 
+    fun addAlt(id: String, stream: Stream) = save(_stations.value.map { st ->
+        if (st.id == id && st.streams.none { it.url == stream.url }) st.copy(alts = st.alts + stream) else st
+    })
+
+    fun removeAlt(id: String, url: String) = save(_stations.value.map { st ->
+        if (st.id == id) st.copy(alts = st.alts.filterNot { it.url == url }) else st
+    })
+
+    /** Делает ссылку основной (например, если основная умерла насовсем). */
+    fun makePrimary(id: String, url: String) = save(_stations.value.map { st ->
+        val chosen = st.alts.firstOrNull { it.url == url }
+        if (st.id != id || chosen == null) st
+        else st.copy(url = chosen.url, bitrate = chosen.bitrate, alts = listOf(Stream(st.url, st.bitrate)) + st.alts.filterNot { it.url == url })
+    })
+
+    /** Импорт из файла: добавляем то, чего ещё нет, свои станции не трогаем. Возвращает, сколько добавлено. */
+    fun import(list: List<Station>): Int {
+        val cur = _stations.value
+        val fresh = list.filter { n -> cur.none { it.id == n.id || it.url == n.url } }.distinctBy { it.url }
+        if (fresh.isNotEmpty()) save(cur + fresh)
+        return fresh.size
+    }
+
+    fun exportJson(): String {
+        val a = JSONArray()
+        _stations.value.forEach { a.put(it.toJson()) }
+        return org.json.JSONObject().put("app", "car-radio").put("version", 1).put("stations", a).toString(2)
+    }
+
+    fun parseExport(text: String): List<Station> {
+        val t = text.trim()
+        val a = if (t.startsWith("[")) JSONArray(t) else org.json.JSONObject(t).getJSONArray("stations")
+        return (0 until a.length()).map { Station.fromJson(a.getJSONObject(it)) }
+    }
+
     fun rename(id: String, name: String) {
         if (name.isBlank()) return
         save(_stations.value.map { if (it.id == id) it.copy(name = name.trim()) else it })

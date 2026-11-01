@@ -17,7 +17,9 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.gaifd.carradio.R
+import com.gaifd.carradio.data.History
 import com.gaifd.carradio.data.Prefs
+import com.gaifd.carradio.data.Traffic
 import com.gaifd.carradio.data.StationRepo
 import com.gaifd.carradio.ui.MainActivity
 import kotlin.math.roundToInt
@@ -32,6 +34,11 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val ACTION_AUTOPLAY = "com.gaifd.carradio.AUTOPLAY"
         const val ACTION_PAUSE = "com.gaifd.carradio.PAUSE"
+        const val ACTION_TOGGLE = "com.gaifd.carradio.TOGGLE"
+        const val ACTION_NEXT = "com.gaifd.carradio.NEXT"
+        const val ACTION_PREV = "com.gaifd.carradio.PREV"
+        const val EXTRA_STATION = "station"
+        const val EXTRA_FROM_CAR = "fromCar"
 
         @Volatile
         var running = false
@@ -54,6 +61,8 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         Prefs.init(this)
         StationRepo.init(this)
+        History.init(this)
+        Traffic.init(this)
         player = CrossfadePlayer(this)
         val open = PendingIntent.getActivity(
             this, 0,
@@ -81,10 +90,29 @@ class PlaybackService : MediaSessionService() {
                     bail()
                     return START_NOT_STICKY
                 }
-                if (Prefs.settings.value.limitStartVolume) capVolume()
+                val s = Prefs.settings.value
+                val fromCar = intent.getBooleanExtra(EXTRA_FROM_CAR, false)
+                if (fromCar && s.limitStartVolume) capVolume()
+                intent.getStringExtra(EXTRA_STATION)?.let { player.selectById(it) }
                 player.play()
+                // Прогрев: пока машина греется, радио молча копит запас и потом начинает играть.
+                if (fromCar && s.warmupSec > 0) player.stockUp(s.warmupSec * 1000L)
             }
             ACTION_PAUSE -> player.pause()
+            ACTION_TOGGLE -> when {
+                player.playWhenReady -> player.pause()
+                StationRepo.stations.value.isEmpty() -> bail()
+                else -> player.play()
+            }
+            // С виджета: листаем и сразу играем.
+            ACTION_NEXT -> {
+                player.seekToNextMediaItem()
+                if (StationRepo.stations.value.isNotEmpty()) player.play() else bail()
+            }
+            ACTION_PREV -> {
+                player.seekToPreviousMediaItem()
+                if (StationRepo.stations.value.isNotEmpty()) player.play() else bail()
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }

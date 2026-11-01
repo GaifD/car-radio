@@ -155,8 +155,12 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             results.forEach { f ->
-                val added = stations.any { it.url == f.url || it.id == f.uuid }
-                ResultRow(f, added) { StationRepo.add(f.toStation()) }
+                val added = stations.any { st -> st.id == f.uuid || st.streams.any { it.url == f.url } }
+                ResultRow(f, added) {
+                    // Другие ссылки той же станции из выдачи — сразу запасными.
+                    val alts = RadioBrowser.sameStation(Station.normalizeName(f.name), results, setOf(f.url))
+                    StationRepo.add(f.toStation(alts))
+                }
             }
         }
 

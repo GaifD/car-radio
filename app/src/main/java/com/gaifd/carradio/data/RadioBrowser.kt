@@ -25,10 +25,12 @@ data class FoundStation(
             listOf(codec, if (bitrate > 0) "$bitrate kbps" else "").filter { it.isNotBlank() }.joinToString(" "),
         ).filter { it.isNotBlank() }.joinToString(" · ")
 
-    fun toStation() = Station(
+    fun toStation(alts: List<Stream> = emptyList()) = Station(
         id = uuid,
         name = name.trim(),
         url = url,
+        bitrate = bitrate,
+        alts = alts,
         genre = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }.take(2)
             .joinToString(" · ") { it.replaceFirstChar { c -> c.uppercase() } },
     )
@@ -79,4 +81,19 @@ object RadioBrowser {
         }
         throw last ?: IOException("Каталог недоступен")
     }
+
+    /** Другие ссылки той же станции в каталоге (часто есть варианты 64/128/320 kbps). */
+    suspend fun findAlternatives(st: Station): List<Stream> {
+        val key = Station.normalizeName(st.name)
+        if (key.isBlank()) return emptyList()
+        val found = search(st.name, ukraineOnly = false)
+        return sameStation(key, found, st.streams.map { it.url }.toSet())
+    }
+
+    fun sameStation(key: String, found: List<FoundStation>, exclude: Set<String>): List<Stream> =
+        found.filter { Station.normalizeName(it.name) == key && it.url !in exclude }
+            .distinctBy { it.url }
+            .map { Stream(it.url, it.bitrate) }
+            .sortedByDescending { it.bitrate }
+            .take(4)
 }
