@@ -144,7 +144,6 @@ private fun NowPlaying(
         ui.playing -> { label = "В ЭФИРЕ"; labelColor = C.accent }
         else -> { label = "ПАУЗА"; labelColor = C.muted }
     }
-    val sub = ui.track ?: st.genre.ifBlank { " " }
 
     Column(
         Modifier
@@ -164,7 +163,8 @@ private fun NowPlaying(
                     lineHeight = 28.sp, maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
-                OneLine(sub, 14, color = C.soft)
+                OneLine(ui.trackTitle ?: st.genre.ifBlank { " " }, 14, color = C.soft, weight = FontWeight.SemiBold)
+                if (ui.trackArtist != null) OneLine(ui.trackArtist, 13, color = C.muted)
             }
         }
 
@@ -185,6 +185,7 @@ private fun NowPlaying(
         }
 
         BufferBar(ui, settings)
+        StreamInfo(ui)
 
         if (ui.error != null) {
             Text(ui.error, fontSize = 12.sp, color = C.amber, lineHeight = 16.sp)
@@ -228,6 +229,28 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
                     .background(color)
             )
         }
+    }
+}
+
+/** Формат и битрейт потока + сколько реально приходит из сети. */
+@Composable
+private fun StreamInfo(ui: RadioUi) {
+    if (!ui.playing || ui.loading) return
+    val left = listOfNotNull(
+        ui.codec,
+        if (ui.bitrateKbps > 0) "${ui.bitrateKbps} kbps" else null,
+    ).joinToString(" · ").ifBlank { "поток" }
+    // Приходит заметно меньше, чем нужно для звука, — запас тает.
+    val slow = ui.offline || (ui.bitrateKbps > 0 && ui.rxKbps < ui.bitrateKbps * 0.85 && ui.bufferMs < ui.targetMs - 2000)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(left, fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.soft)
+        Spacer(Modifier.weight(1f))
+        Text("приём ", fontSize = 12.sp, color = C.muted)
+        Text(
+            "${ui.rxKbps} kbps",
+            fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold,
+            color = if (slow) C.amber else C.text,
+        )
     }
 }
 

@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.ParserException
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -19,13 +20,17 @@ import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.SimpleBasePlayer.MediaItemData
 import androidx.media3.common.SimpleBasePlayer.State
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import androidx.media3.extractor.metadata.icy.IcyHeaders
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Station
@@ -38,6 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -113,6 +119,13 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var skipCount = 0
 
     private val titles = HashMap<ExoPlayer, String?>()
+    private val counters = HashMap<ExoPlayer, AtomicLong>()
+    private var rxFor: ExoPlayer? = null
+    private var rxBytes = 0L
+    private var rxAt = 0L
+    private var rxKbps = 0.0
+    private var codec: String? = null
+    private var bitrateKbps = 0
     private var offline = false
     private var lastBuffered = 0L
     private var lastGrowAt = 0L
@@ -150,10 +163,12 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     override fun getState(): State {
         val showTrack = Prefs.settings.value.showTrack
         val items = stations.map { st ->
-            val track = if (st.id == currentId && showTrack) currentTrack() else null
+            val track = if (st.id == currentId && showTrack) currentTrack()?.let { splitTrack(it) } else null
+            // Магнитола показывает отдельными строками: песня / исполнитель / альбом (= станция).
             val meta = MediaMetadata.Builder()
-                .setTitle(track ?: st.name)
-                .setArtist(if (track != null) st.name else "Авторадио")
+                .setTitle(track?.title ?: st.name)
+                .setArtist(track?.artist ?: if (track != null) st.name else "Авторадио")
+                .setAlbumTitle(st.name)
                 .setDisplayTitle(st.name)
                 .setStation(st.name)
                 .setIsPlayable(true)
@@ -409,6 +424,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun newExo(targetMs: Long): ExoPlayer {
         val t = targetMs.toInt()
+        val counter = AtomicLong(0)
         val load = DefaultLoadControl.Builder()
             .setBufferDurationsMs(t, t + 5_000, 2_500, 4_000)
             .setPrioritizeTimeOverSizeThresholds(true)
@@ -418,6 +434,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10_000)
             .setReadTimeoutMs(15_000)
+            .setTransferListener(ByteCounter(counter))
         val sources = DefaultMediaSourceFactory(ctx)
             .setDataSourceFactory(http)
             .setLoadErrorHandlingPolicy(RetryPolicy())
@@ -429,7 +446,45 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             .setWakeMode(C.WAKE_MODE_NETWORK) // не даёт уснуть процессору и Wi-Fi, пока играет
             .build()
         exo.addListener(ExoListener(exo))
+        counters[exo] = counter
         return exo
+    }
+
+    /** Считает байты из сети — отсюда «приём N kbps». Вызывается в потоке загрузчика. */
+    private class ByteCounter(private val bytes: AtomicLong) : TransferListener {
+        override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+        override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+        override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
+            if (isNetwork) bytes.addAndGet(bytesTransferred.toLong())
+        }
+        override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
+    }
+
+    private fun readFormat(a: ExoPlayer) {
+        val f = a.audioFormat
+        if (f == null) {
+            codec = null
+            bitrateKbps = 0
+            return
+        }
+        var br = 0
+        f.metadata?.let { m ->
+            for (i in 0 until m.length()) {
+                val e = m.get(i)
+                if (e is IcyHeaders && e.bitrate > 0) br = e.bitrate / 1000
+            }
+        }
+        if (br <= 0) br = listOf(f.averageBitrate, f.bitrate, f.peakBitrate).firstOrNull { it > 0 }?.div(1000) ?: 0
+        bitrateKbps = br
+        codec = when (f.sampleMimeType) {
+            MimeTypes.AUDIO_MPEG -> "MP3"
+            MimeTypes.AUDIO_AAC -> "AAC"
+            MimeTypes.AUDIO_OPUS -> "Opus"
+            MimeTypes.AUDIO_VORBIS -> "Vorbis"
+            MimeTypes.AUDIO_FLAC -> "FLAC"
+            null -> null
+            else -> f.sampleMimeType?.substringAfter('/')?.uppercase()
+        }
     }
 
     private fun mediaItem(st: Station): MediaItem = MediaItem.Builder()
@@ -440,6 +495,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun releaseExo(e: ExoPlayer) {
         titles.remove(e)
+        counters.remove(e)
         try {
             e.stop()
             e.release()
@@ -580,6 +636,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val now = SystemClock.uptimeMillis()
         var bufMs = 0L
         if (a != null && activeId == currentId) {
+            measureRx(a, now)
+            readFormat(a)
             bufMs = a.totalBufferedDuration
             val bp = a.bufferedPosition
             if (bp > lastBuffered + 50) {
@@ -603,8 +661,30 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 a.playbackState == Player.STATE_READY && bufMs < activeTargetMs - 1500
             val speed = if (slow) SLOW_SPEED else 1f
             if (a.playbackParameters.speed != speed) a.playbackParameters = PlaybackParameters(speed)
+        } else {
+            rxFor = null
+            rxKbps = 0.0
+            codec = null
+            bitrateKbps = 0
         }
         publish(bufMs)
+    }
+
+    private fun measureRx(a: ExoPlayer, now: Long) {
+        val total = counters[a]?.get() ?: return
+        if (rxFor !== a) {
+            rxFor = a
+            rxBytes = total
+            rxAt = now
+            rxKbps = 0.0
+            return
+        }
+        val dt = now - rxAt
+        if (dt < 400) return
+        val inst = (total - rxBytes) * 8.0 / dt // бит/мс = kbps
+        rxKbps = if (rxKbps == 0.0) inst else rxKbps * 0.7 + inst * 0.3 // сглаживаем, чтобы цифра не прыгала
+        rxBytes = total
+        rxAt = now
     }
 
     private fun onStationsChanged(list: List<Station>) {
@@ -640,11 +720,17 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     }
 
     private fun publish(bufMs: Long) {
+        val track = currentTrack()?.let { splitTrack(it) }
+        val same = activeId == currentId
         RadioBus.state.value = RadioUi(
             stationId = currentId,
             playing = userPlay,
             loading = isLoadingNow(),
-            track = currentTrack(),
+            trackTitle = track?.title,
+            trackArtist = track?.artist,
+            codec = if (same) codec else null,
+            bitrateKbps = if (same) bitrateKbps else 0,
+            rxKbps = if (same) rxKbps.toInt() else 0,
             bufferMs = bufMs,
             targetMs = if (activeId == currentId) activeTargetMs else Prefs.settings.value.bufferSec * 1000L,
             offline = offline && userPlay,
