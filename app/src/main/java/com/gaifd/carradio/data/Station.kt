@@ -13,6 +13,7 @@ data class Station(
     val genre: String = "",
     val bitrate: Int = 0,
     val alts: List<Stream> = emptyList(),
+    val logo: String = "",          // ссылка на логотип из каталога (картинка хранится локально)
 ) {
     /** Основная ссылка первой, затем запасные. */
     val streams: List<Stream> get() = listOf(Stream(url, bitrate)) + alts
@@ -36,6 +37,7 @@ data class Station(
         .put("url", url)
         .put("genre", genre)
         .put("bitrate", bitrate)
+        .put("logo", logo)
         .put("alts", JSONArray().also { a ->
             alts.forEach { a.put(JSONObject().put("url", it.url).put("bitrate", it.bitrate)) }
         })
@@ -58,6 +60,7 @@ data class Station(
                 genre = o.optString("genre", ""),
                 bitrate = o.optInt("bitrate", 0),
                 alts = alts,
+                logo = o.optString("logo", ""),
             )
         }
 

@@ -9,6 +9,7 @@ data class RadioUi(
     val loading: Boolean = false,
     val trackTitle: String? = null,
     val trackArtist: String? = null,
+    val rawTrack: String? = null,       // трек как прислала станция — для «понравилось» и истории
     val bufferMs: Long = 0,
     val targetMs: Long = 30_000,
     val offline: Boolean = false,

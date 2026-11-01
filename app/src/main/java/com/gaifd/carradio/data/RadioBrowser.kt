@@ -18,6 +18,7 @@ data class FoundStation(
     val bitrate: Int,
     val country: String,
     val tags: String,
+    val favicon: String = "",
 ) {
     val meta: String
         get() = listOf(
@@ -31,6 +32,7 @@ data class FoundStation(
         url = url,
         bitrate = bitrate,
         alts = alts,
+        logo = favicon,
         genre = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }.take(2)
             .joinToString(" · ") { it.replaceFirstChar { c -> c.uppercase() } },
     )
@@ -70,6 +72,7 @@ object RadioBrowser {
                         bitrate = o.optInt("bitrate", 0),
                         country = o.optString("countrycode"),
                         tags = o.optString("tags"),
+                        favicon = o.optString("favicon").takeIf { it.startsWith("http") } ?: "",
                     )
                 }
                 return@withContext list
@@ -88,6 +91,14 @@ object RadioBrowser {
         if (key.isBlank()) return emptyList()
         val found = search(st.name, ukraineOnly = false)
         return sameStation(key, found, st.streams.map { it.url }.toSet())
+    }
+
+    /** Логотип станции по названию (для станций, добавленных до появления логотипов). */
+    suspend fun findLogo(st: Station): String? {
+        val key = Station.normalizeName(st.name)
+        val found = search(st.name, ukraineOnly = false)
+        return (found.firstOrNull { it.uuid == st.id && it.favicon.isNotBlank() }
+            ?: found.firstOrNull { Station.normalizeName(it.name) == key && it.favicon.isNotBlank() })?.favicon
     }
 
     fun sameStation(key: String, found: List<FoundStation>, exclude: Set<String>): List<Stream> =

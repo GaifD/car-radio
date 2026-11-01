@@ -47,7 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gaifd.carradio.data.Favorites
 import com.gaifd.carradio.data.History
+import com.gaifd.carradio.data.Stats
 import com.gaifd.carradio.data.HistoryEntry
 import com.gaifd.carradio.data.RadioBrowser
 import com.gaifd.carradio.data.StationRepo
@@ -194,67 +196,49 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
     )
 }
 
-/** Вся история треков. */
+/** Вкладка «Песни»: понравившиеся, история и статистика. */
 @Composable
-fun HistoryScreen(items: List<HistoryEntry>, onBack: () -> Unit, onSearch: (String) -> Unit) {
+fun SongsScreen(segment: Int, onSegment: (Int) -> Unit, history: List<HistoryEntry>, onSearch: (String) -> Unit) {
+    val favs by Favorites.items.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(C.bg).padding(horizontal = 16.dp)) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onBack)
-                    .semantics { contentDescription = "Назад" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Ic.chevronRight, null, tint = C.text, modifier = Modifier.size(22.dp).scale(-1f, 1f))
-            }
-            Spacer(Modifier.width(4.dp))
-            Text("История", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (items.isNotEmpty()) {
-                Text(
-                    "Очистить", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.muted,
-                    modifier = Modifier.clickable { confirmClear = true }.padding(8.dp),
-                )
-            }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        ScreenTitle("Песни")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+            Chip("Понравилось", segment == 0) { onSegment(0) }
+            Chip("История", segment == 1) { onSegment(1) }
+            Chip("Статистика", segment == 2) { onSegment(2) }
         }
-        Text(
-            "Нажми на песню, чтобы найти её в интернете.",
-            fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-        )
-        if (items.isEmpty()) {
-            Text("Пока пусто", fontSize = 14.sp, color = C.soft, modifier = Modifier.padding(4.dp))
-        } else {
-            LazyColumn(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(C.card)
-                    .padding(horizontal = 14.dp)
-            ) {
-                itemsIndexed(items) { i, h ->
-                    if (i == 0 || dayOf(items[i - 1].time) != dayOf(h.time)) {
-                        Text(
-                            dayLabel(h.time), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent,
-                            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
-                        )
-                    }
-                    HistoryRow(h, divider = i < items.size - 1 && dayOf(items[i + 1].time) == dayOf(h.time), onSearch = onSearch)
+        when (segment) {
+            0 -> {
+                if (favs.isEmpty()) {
+                    Hint("Нажми сердечко у песни на главном экране или в истории — она появится здесь.")
+                } else {
+                    Hint("Нажми на песню, чтобы найти её в YouTube Music, Spotify или Google.")
+                    SongList(favs.map { HistoryEntry(it.time, it.station, it.track) }, onSearch)
                 }
             }
+            1 -> {
+                if (history.isEmpty()) {
+                    Hint("Пока пусто. Здесь будут песни, которые играли, — если станция присылает названия.")
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Hint("Нажми на песню, чтобы найти её.", Modifier.weight(1f))
+                        Text(
+                            "Очистить", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.muted,
+                            modifier = Modifier.clickable { confirmClear = true }.padding(8.dp),
+                        )
+                    }
+                    SongList(history, onSearch)
+                }
+            }
+            else -> StatsView()
         }
-        Spacer(Modifier.height(12.dp))
     }
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
             containerColor = C.card,
             titleContentColor = C.text,
-            textContentColor = C.soft,
             title = { Text("Очистить историю?", fontWeight = FontWeight.Bold) },
             confirmButton = {
                 TextButton(onClick = { History.clear(); confirmClear = false }) { Text("Очистить", color = C.amber) }
@@ -264,6 +248,121 @@ fun HistoryScreen(items: List<HistoryEntry>, onBack: () -> Unit, onSearch: (Stri
             },
         )
     }
+}
+
+@Composable
+private fun Hint(text: String, modifier: Modifier = Modifier) {
+    Text(text, fontSize = 12.sp, color = C.muted, lineHeight = 17.sp, modifier = modifier.padding(start = 4.dp, bottom = 8.dp))
+}
+
+@Composable
+private fun SongList(items: List<HistoryEntry>, onSearch: (String) -> Unit) {
+    LazyColumn(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(C.card)
+            .padding(horizontal = 14.dp)
+    ) {
+        itemsIndexed(items) { i, h ->
+            if (i == 0 || dayOf(items[i - 1].time) != dayOf(h.time)) {
+                Text(
+                    dayLabel(h.time), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
+                )
+            }
+            HistoryRow(h, divider = i < items.size - 1 && dayOf(items[i + 1].time) == dayOf(h.time), onSearch = onSearch)
+        }
+    }
+}
+
+@Composable
+private fun StatsView() {
+    val ver by Stats.version.collectAsState()
+    val month = remember(ver) { Stats.month() }
+    val all = remember(ver) { Stats.allTime() }
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        Card(padding = 16) {
+            Text("Этот месяц", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(hours(month.sumOf { it.ms }), fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 30.sp, color = C.accent)
+            Spacer(Modifier.height(8.dp))
+            if (month.isEmpty()) Text("Ещё ничего не слушал", fontSize = 13.sp, color = C.soft)
+            val top = month.firstOrNull()?.ms ?: 1L
+            month.take(10).forEach { st -> StatBar(st.name, st.ms, top) }
+        }
+        Spacer(Modifier.height(10.dp))
+        Card(padding = 16) {
+            Text("За всё время", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(hours(all.sumOf { it.ms }), fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 24.sp)
+            Spacer(Modifier.height(4.dp))
+            all.take(5).forEach { st ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    OneLine(st.name, 13, color = C.soft)
+                    Spacer(Modifier.weight(1f))
+                    Text(hours(st.ms), fontSize = 13.sp, fontFamily = Chakra, color = C.text)
+                }
+            }
+            Text(
+                "сбросить статистику", fontSize = 12.sp, color = C.muted,
+                modifier = Modifier.clickable { Stats.reset() }.padding(top = 10.dp, bottom = 2.dp),
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun StatBar(name: String, ms: Long, top: Long) {
+    Column(Modifier.padding(vertical = 6.dp)) {
+        Row {
+            OneLine(name, 13, weight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(hours(ms), fontSize = 13.sp, fontFamily = Chakra, color = C.soft)
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.line)) {
+            Box(
+                Modifier
+                    .fillMaxWidth((ms.toFloat() / top).coerceIn(0.02f, 1f))
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(C.accent)
+            )
+        }
+    }
+}
+
+private fun hours(ms: Long): String {
+    val min = ms / 60_000
+    return if (min < 60) "$min мин" else "${min / 60} ч ${min % 60} мин"
+}
+
+/** Где искать песню. */
+@Composable
+fun SearchChooser(query: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = C.card,
+        titleContentColor = C.text,
+        title = { Text(query, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 3) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("ytmusic" to "YouTube Music", "spotify" to "Spotify", "google" to "Google").forEach { (id, label) ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(C.bg)
+                            .clickable { onPick(id) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) { Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть", color = C.muted) } },
+    )
 }
 
 private fun dayOf(t: Long) = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date(t))

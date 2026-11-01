@@ -1,6 +1,13 @@
 package com.gaifd.carradio.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +96,28 @@ fun Monogram(text: String, size: Int, active: Boolean, big: Boolean = false) {
     }
 }
 
+/** Логотип станции, если есть, иначе буквенная плашка. */
+@Composable
+fun StationLogo(st: com.gaifd.carradio.data.Station, size: Int, active: Boolean, big: Boolean = false) {
+    val ver by com.gaifd.carradio.data.Logos.version.collectAsState()
+    val bmp = remember(st.id, ver) { com.gaifd.carradio.data.Logos.bitmap(st.id)?.asImageBitmap() }
+    if (bmp == null) {
+        Monogram(st.short, size, active, big)
+        return
+    }
+    Box(
+        Modifier
+            .size(size.dp)
+            .clip(RoundedCornerShape((size / 3.5f).dp))
+            .background(C.logoBg)
+            .then(if (active && !big) Modifier.border(2.dp, C.accent, RoundedCornerShape((size / 3.5f).dp)) else Modifier)
+            .padding((size / 10).dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(bmp, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+    }
+}
+
 @Composable
 fun ToggleRow(title: String, hint: String, checked: Boolean, divider: Boolean = true, onChange: (Boolean) -> Unit) {
     Column {
@@ -109,7 +138,7 @@ fun ToggleRow(title: String, hint: String, checked: Boolean, divider: Boolean = 
                 checked = checked,
                 onCheckedChange = onChange,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = C.bg,
+                    checkedThumbColor = C.onAccent,
                     checkedTrackColor = C.accent,
                     checkedBorderColor = Color.Transparent,
                     uncheckedThumbColor = C.muted,

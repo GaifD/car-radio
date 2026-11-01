@@ -34,6 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -41,7 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gaifd.carradio.data.Favorites
 import com.gaifd.carradio.data.HistoryEntry
+import com.gaifd.carradio.data.Logos
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Settings
 import com.gaifd.carradio.data.Station
@@ -65,6 +70,10 @@ fun RadioScreen(
     onEditStreams: (Station) -> Unit,
     onOpenHistory: () -> Unit,
     onSearchTrack: (String) -> Unit,
+    output: AudioOut,
+    update: String?,
+    onUpdate: () -> Unit,
+    onDrive: () -> Unit,
 ) {
     val current = stations.firstOrNull { it.id == ui.stationId } ?: stations.firstOrNull()
     Column(
@@ -73,8 +82,12 @@ fun RadioScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        Header(settings, ui)
+        Header(settings, ui, output, onDrive)
 
+        if (update != null) {
+            Banner("Есть новая версия $update — нажми, чтобы обновить", onUpdate)
+            Spacer(Modifier.height(10.dp))
+        }
         if (!batteryOk) {
             Banner("Телефон может выключить радио в фоне. Нажми, чтобы снять ограничение батареи.", onFixBattery)
             Spacer(Modifier.height(10.dp))
@@ -94,7 +107,7 @@ fun RadioScreen(
         } else {
             NowPlaying(current, ui, settings, onToggle, onPrev, onNext)
             SectionTitle("Мои станции", "удерживай — меню")
-            StationGrid(stations, ui.stationId, onPlay, onEditStreams)
+            StationList(settings.stationView, stations, ui.stationId, onPlay, onEditStreams)
             if (history.isNotEmpty()) {
                 SectionTitle("Недавно играло", null)
                 Card(padding = 14) {
@@ -119,7 +132,7 @@ fun RadioScreen(
 }
 
 @Composable
-private fun Header(settings: Settings, ui: RadioUi) {
+private fun Header(settings: Settings, ui: RadioUi, output: AudioOut, onDrive: () -> Unit) {
     val dot = when {
         ui.offline -> C.amber
         ui.playing && !ui.loading -> C.accent
@@ -140,9 +153,20 @@ private fun Header(settings: Settings, ui: RadioUi) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            OneLine(settings.carName ?: "Авторадио", 15, weight = FontWeight.Bold)
+            // Куда реально идёт звук: машина, наушники или динамик телефона.
+            OneLine(output.name, 15, weight = FontWeight.Bold)
             Text(status, fontSize = 12.sp, color = C.muted)
         }
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .border(1.dp, C.border, CircleShape)
+                .clickable(onClick = onDrive)
+                .semantics { contentDescription = "Режим за рулём" },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Ic.wheel, null, tint = C.soft, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.width(8.dp))
         // Быстрый переключатель «Трассы» прямо на главном экране.
         Box(
             Modifier
@@ -190,11 +214,12 @@ private fun NowPlaying(
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(C.card)
+            .swipeStations(onPrev, onNext)
             .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Monogram(st.short, 72, active = true, big = true)
+            StationLogo(st, 72, active = true, big = true)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = labelColor, letterSpacing = 1.sp)
@@ -205,6 +230,8 @@ private fun NowPlaying(
                 OneLine(ui.trackTitle ?: st.genre.ifBlank { " " }, 14, color = C.soft, weight = FontWeight.SemiBold)
                 if (ui.trackArtist != null) OneLine(ui.trackArtist, 13, color = C.muted)
             }
+            val raw = ui.rawTrack
+            if (raw != null) HeartButton(st.name, raw)
         }
 
         Row(
@@ -216,7 +243,7 @@ private fun NowPlaying(
                 Icon(Ic.prev, null, tint = C.text, modifier = Modifier.size(24.dp))
             }
             RoundButton(80, filled = true, desc = if (ui.playing) "Пауза" else "Играть", onClick = onToggle) {
-                Icon(if (ui.playing) Ic.pause else Ic.play, null, tint = C.bg, modifier = Modifier.size(32.dp))
+                Icon(if (ui.playing) Ic.pause else Ic.play, null, tint = C.onAccent, modifier = Modifier.size(32.dp))
             }
             RoundButton(56, filled = false, desc = "Следующая станция", onClick = onNext) {
                 Icon(Ic.next, null, tint = C.text, modifier = Modifier.size(24.dp))
@@ -322,7 +349,7 @@ fun PillButton(text: String, filled: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-            color = if (filled) C.bg else C.accent, maxLines = 2,
+            color = if (filled) C.onAccent else C.accent, maxLines = 2,
         )
     }
 }
@@ -358,25 +385,63 @@ fun HistoryRow(h: HistoryEntry, divider: Boolean, onSearch: (String) -> Unit) {
                 OneLine(t.title, 14, weight = FontWeight.SemiBold)
                 OneLine(listOfNotNull(t.artist, h.station).joinToString(" · "), 12, color = C.muted)
             }
-            Icon(Ic.search, contentDescription = "Найти песню", tint = C.accent, modifier = Modifier.size(18.dp))
+            HeartButton(h.station, h.track, 38)
         }
         if (divider) Box(Modifier.fillMaxWidth().heightIn(min = 1.dp, max = 1.dp).background(C.line))
     }
 }
 
+/** Свайп по карточке влево/вправо — соседняя станция. */
+fun Modifier.swipeStations(onPrev: () -> Unit, onNext: () -> Unit): Modifier = this.pointerInput(Unit) {
+    var total = 0f
+    detectHorizontalDragGestures(
+        onDragStart = { total = 0f },
+        onDragEnd = {
+            if (total < -120f) onNext() else if (total > 120f) onPrev()
+            total = 0f
+        },
+        onHorizontalDrag = { _, d -> total += d },
+    )
+}
+
 @Composable
-private fun StationGrid(
+fun HeartButton(station: String, track: String, size: Int = 40) {
+    val favs by Favorites.items.collectAsState()
+    val liked = favs.any { it.track.equals(track, ignoreCase = true) }
+    Box(
+        Modifier
+            .size(size.dp)
+            .clip(CircleShape)
+            .clickable { Favorites.toggle(station, track) }
+            .semantics { contentDescription = if (liked) "Убрать из понравившихся" else "Нравится" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(if (liked) Ic.heartFilled else Ic.heart, null, tint = if (liked) C.accent else C.muted, modifier = Modifier.size((size * 0.55f).dp))
+    }
+}
+
+/** Четыре вида списка станций — выбираются в Настройках. */
+@Composable
+private fun StationList(
+    view: Int,
     stations: List<Station>,
     currentId: String?,
     onPlay: (Station) -> Unit,
     onEditStreams: (Station) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        stations.chunked(2).forEach { row ->
+    val perRow = when (view) {
+        Settings.VIEW_LIST, Settings.VIEW_COMPACT -> 1
+        Settings.VIEW_BIG -> 3
+        else -> 2
+    }
+    val gap = if (view == Settings.VIEW_COMPACT) 6.dp else 10.dp
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+        stations.chunked(perRow).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { st ->
                     StationTile(
                         st,
+                        view = view,
                         active = st.id == currentId,
                         isFirst = stations.firstOrNull()?.id == st.id,
                         isLast = stations.lastOrNull()?.id == st.id,
@@ -385,7 +450,7 @@ private fun StationGrid(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -395,6 +460,7 @@ private fun StationGrid(
 @Composable
 private fun StationTile(
     st: Station,
+    view: Int,
     active: Boolean,
     isFirst: Boolean,
     isLast: Boolean,
@@ -403,48 +469,103 @@ private fun StationTile(
     modifier: Modifier = Modifier,
 ) {
     var menu by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(if (view == Settings.VIEW_COMPACT) 12.dp else 16.dp)
+    val base = Modifier
+        .fillMaxWidth()
+        .clip(shape)
+        .background(if (active) C.accentBg else C.card)
+        .border(1.dp, if (active) C.accent else Color.Transparent, shape)
+        .combinedClickable(onClick = onPlay, onLongClick = { menu = true })
+    val sub = listOf(
+        st.genre,
+        if (st.bitrate > 0 && view == Settings.VIEW_LIST) "${st.bitrate} kbps" else "",
+        if (st.alts.isNotEmpty()) "+${st.alts.size} ссыл." else "",
+    ).filter { it.isNotBlank() }.joinToString(" · ")
+
     Box(modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (active) C.accentBg else C.card)
-                .border(1.dp, if (active) C.accent else Color.Transparent, RoundedCornerShape(16.dp))
-                .combinedClickable(onClick = onPlay, onLongClick = { menu = true })
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Monogram(st.short, 42, active = active)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                OneLine(st.name, 14, weight = FontWeight.Bold)
-                val sub = listOf(st.genre, if (st.alts.isNotEmpty()) "+${st.alts.size} ссыл." else "")
-                    .filter { it.isNotBlank() }.joinToString(" · ")
-                if (sub.isNotBlank()) OneLine(sub, 11, color = C.muted)
+        when (view) {
+            Settings.VIEW_BIG -> Column(
+                base.heightIn(min = 112.dp).padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+            ) {
+                StationLogo(st, 56, active = active)
+                Text(
+                    st.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis, lineHeight = 15.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+            Settings.VIEW_LIST -> Row(
+                base.heightIn(min = 76.dp).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StationLogo(st, 52, active = active)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    OneLine(st.name, 16, weight = FontWeight.Bold)
+                    if (sub.isNotBlank()) OneLine(sub, 12, color = C.muted)
+                }
+                if (active) Icon(Ic.play, null, tint = C.accent, modifier = Modifier.size(18.dp))
+            }
+            Settings.VIEW_COMPACT -> Row(
+                base.heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StationLogo(st, 32, active = active)
+                Spacer(Modifier.width(12.dp))
+                OneLine(st.name, 14, weight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                if (st.genre.isNotBlank()) Text(st.genre.substringBefore(" ·"), fontSize = 11.sp, color = C.muted, maxLines = 1)
+            }
+            else -> Row(
+                base.heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StationLogo(st, 42, active = active)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    OneLine(st.name, 14, weight = FontWeight.Bold)
+                    if (sub.isNotBlank()) OneLine(sub, 11, color = C.muted)
+                }
             }
         }
-        DropdownMenu(
-            expanded = menu,
-            onDismissRequest = { menu = false },
-            modifier = Modifier.background(C.card),
-        ) {
-            DropdownMenuItem(
-                text = { Text("Ссылки потока (${st.streams.size})", color = C.text) },
-                onClick = { menu = false; onEditStreams() },
-            )
-            if (!isFirst) DropdownMenuItem(
-                text = { Text("Сдвинуть раньше", color = C.text) },
-                onClick = { StationRepo.move(st.id, -1); menu = false },
-            )
-            if (!isLast) DropdownMenuItem(
-                text = { Text("Сдвинуть позже", color = C.text) },
-                onClick = { StationRepo.move(st.id, 1); menu = false },
-            )
-            DropdownMenuItem(
-                text = { Text("Удалить", color = C.amber) },
-                onClick = { StationRepo.remove(st.id); menu = false },
-            )
-        }
+        StationMenu(st, menu, isFirst, isLast, onDismiss = { menu = false }, onEditStreams = onEditStreams)
     }
+}
+
+@Composable
+private fun StationMenu(st: Station, open: Boolean, isFirst: Boolean, isLast: Boolean, onDismiss: () -> Unit, onEditStreams: () -> Unit) {
+    val hasLogo = Logos.has(st.id)
+    DropdownMenu(expanded = open, onDismissRequest = onDismiss, modifier = Modifier.background(C.card)) {
+        DropdownMenuItem(
+            text = { Text("Ссылки потока (${st.streams.size})", color = C.text) },
+            onClick = { onDismiss(); onEditStreams() },
+        )
+        DropdownMenuItem(
+            text = { Text(if (hasLogo) "Сменить логотип" else "Свой логотип", color = C.text) },
+            onClick = { onDismiss(); RadioScreenActions.pickLogo?.invoke(st.id) },
+        )
+        if (hasLogo) DropdownMenuItem(
+            text = { Text("Убрать логотип", color = C.text) },
+            onClick = { onDismiss(); Logos.remove(st.id); StationRepo.setLogo(st.id, "") },
+        )
+        if (!isFirst) DropdownMenuItem(
+            text = { Text("Сдвинуть раньше", color = C.text) },
+            onClick = { StationRepo.move(st.id, -1); onDismiss() },
+        )
+        if (!isLast) DropdownMenuItem(
+            text = { Text("Сдвинуть позже", color = C.text) },
+            onClick = { StationRepo.move(st.id, 1); onDismiss() },
+        )
+        DropdownMenuItem(
+            text = { Text("Удалить", color = C.amber) },
+            onClick = { StationRepo.remove(st.id); Logos.remove(st.id); onDismiss() },
+        )
+    }
+}
+
+/** Действия, которым нужна Activity (выбор картинки из галереи). */
+object RadioScreenActions {
+    var pickLogo: ((String) -> Unit)? = null
 }

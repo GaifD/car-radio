@@ -23,12 +23,38 @@ data class Settings(
     val carName: String? = null,
     val lastStationId: String? = null,
     val searchUkraine: Boolean = true,
+    val stationView: Int = VIEW_GRID,
+    val eqPreset: String = "off",
+    val eqCustom: List<Int> = listOf(0, 0, 0, 0, 0),   // дБ на 60 / 230 / 910 / 3600 / 14000 Гц
+    val scheduleOn: Boolean = false,
+    val schedule: Map<String, String> = emptyMap(),    // утро/день/вечер/ночь → id станции
+    val theme: Int = THEME_DARK,
 ) {
     /** Режим «Трасса» — запас до 3 минут. */
     val targetBufferMs: Long get() = if (highway) HIGHWAY_BUFFER_MS else bufferSec * 1000L
 
     companion object {
         const val HIGHWAY_BUFFER_MS = 180_000L
+
+        const val VIEW_GRID = 0
+        const val VIEW_LIST = 1
+        const val VIEW_BIG = 2
+        const val VIEW_COMPACT = 3
+
+        const val THEME_SYSTEM = 0
+        const val THEME_DARK = 1
+        const val THEME_LIGHT = 2
+        const val THEME_BY_TIME = 3
+
+        /** Периоды для «станции по расписанию». */
+        val PERIODS = listOf("morning" to "Утро · 5–11", "day" to "День · 11–17", "evening" to "Вечер · 17–23", "night" to "Ночь · 23–5")
+
+        fun periodAt(hour: Int): String = when (hour) {
+            in 5..10 -> "morning"
+            in 11..16 -> "day"
+            in 17..22 -> "evening"
+            else -> "night"
+        }
     }
 }
 
@@ -62,6 +88,16 @@ object Prefs {
             carName = sp.getString("carName", null),
             lastStationId = sp.getString("lastStationId", null),
             searchUkraine = sp.getBoolean("searchUkraine", d.searchUkraine),
+            stationView = sp.getInt("stationView", d.stationView),
+            eqPreset = sp.getString("eqPreset", d.eqPreset) ?: d.eqPreset,
+            eqCustom = sp.getString("eqCustom", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
+                ?.takeIf { it.size == 5 } ?: d.eqCustom,
+            scheduleOn = sp.getBoolean("scheduleOn", d.scheduleOn),
+            schedule = sp.getString("schedule", "")!!.split(';').mapNotNull {
+                val k = it.substringBefore('=', ""); val v = it.substringAfter('=', "")
+                if (k.isNotBlank() && v.isNotBlank()) k to v else null
+            }.toMap(),
+            theme = sp.getInt("theme", d.theme),
         )
     }
 
@@ -88,12 +124,22 @@ object Prefs {
             .putString("carName", s.carName)
             .putString("lastStationId", s.lastStationId)
             .putBoolean("searchUkraine", s.searchUkraine)
+            .putInt("stationView", s.stationView)
+            .putString("eqPreset", s.eqPreset)
+            .putString("eqCustom", s.eqCustom.joinToString(","))
+            .putBoolean("scheduleOn", s.scheduleOn)
+            .putString("schedule", s.schedule.entries.joinToString(";") { "${it.key}=${it.value}" })
+            .putInt("theme", s.theme)
             .apply()
     }
 
     var askedNotifications: Boolean
         get() = sp.getBoolean("askedNotif", false)
         set(v) = sp.edit().putBoolean("askedNotif", v).apply()
+
+    var lastUpdateCheck: Long
+        get() = sp.getLong("lastUpdateCheck", 0)
+        set(v) = sp.edit().putLong("lastUpdateCheck", v).apply()
 
     /** Подобранное выравниванием усиление для станции — чтобы при следующем включении начать сразу с него. */
     fun gain(stationId: String): Float = gains.getFloat(stationId, 1f)

@@ -3,6 +3,7 @@ package com.gaifd.carradio.playback
 import android.content.Context
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.audiofx.Equalizer
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
@@ -39,6 +40,8 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.metadata.icy.IcyHeaders
 import androidx.media3.extractor.metadata.icy.IcyInfo
 import com.gaifd.carradio.data.History
+import com.gaifd.carradio.data.Logos
+import com.gaifd.carradio.data.Stats
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Station
 import com.gaifd.carradio.data.StationRepo
@@ -94,6 +97,14 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             Player.COMMAND_RELEASE,
         ).build()
 
+        val EQ_FREQS = listOf(60.0, 230.0, 910.0, 3600.0, 14000.0)
+        val EQ_PRESETS = mapOf(
+            "bass" to listOf(6, 3, 0, 0, 1),
+            "voice" to listOf(-2, 0, 3, 4, 1),
+            "car" to listOf(5, 2, -1, 2, 4),
+            "soft" to listOf(1, 0, -1, -2, -3),
+        )
+
         val ATTRS: AudioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -105,6 +116,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val counter = AtomicLong(0)
         val leveler = Leveler(Prefs.gain(stationId)).also { it.enabled = Prefs.settings.value.leveler }
         val exo: ExoPlayer = buildExo(this)
+        val eq: Equalizer? = makeEqualizer(exo)
         var title: String? = null
         var retries = 0
     }
@@ -146,6 +158,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var error: String? = null
     private var lastTarget = Prefs.settings.value.targetBufferMs
     private var lastLeveler = Prefs.settings.value.leveler
+    private var lastEq = Prefs.settings.value.eqPreset to Prefs.settings.value.eqCustom
 
     private var rxFor: Slot? = null
     private var rxBytes = 0L
@@ -184,6 +197,11 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                     lastLeveler = s.leveler
                     listOfNotNull(active, incoming, fadingOut).forEach { it.leveler.enabled = s.leveler }
                 }
+                val eqNow = s.eqPreset to s.eqCustom
+                if (eqNow != lastEq) {
+                    lastEq = eqNow
+                    listOfNotNull(active, incoming, fadingOut).forEach { applyEqualizer(it.eq) }
+                }
                 if (s.targetBufferMs != lastTarget) {
                     lastTarget = s.targetBufferMs
                     // Новый размер буфера («Трасса» и т.п.) — переподключаем текущую станцию сразу.
@@ -204,7 +222,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val items = stations.map { st ->
             val track = if (st.id == currentId && showTrack) currentTrack()?.let { splitTrack(it) } else null
             // Магнитола показывает отдельными строками: песня / исполнитель / альбом (= станция).
-            val meta = MediaMetadata.Builder()
+            val mb = MediaMetadata.Builder()
                 .setTitle(track?.title ?: st.name)
                 .setArtist(track?.artist ?: if (track != null) st.name else "Авторадио")
                 .setAlbumTitle(st.name)
@@ -212,7 +230,9 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 .setStation(st.name)
                 .setIsPlayable(true)
                 .setIsBrowsable(false)
-                .build()
+            // Логотип станции — обложкой на экране блокировки и, если магнитола умеет, на ней.
+            if (st.id == currentId) Logos.pngBytes(st.id)?.let { mb.setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) }
+            val meta = mb.build()
             MediaItemData.Builder(st.id)
                 .setMediaItem(mediaItem(st, st.url))
                 .setMediaMetadata(meta)
@@ -604,6 +624,49 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         return exo
     }
 
+    // ---------- Эквалайзер ----------
+
+    private fun makeEqualizer(exo: ExoPlayer): Equalizer? = try {
+        Equalizer(0, exo.audioSessionId).also { applyEqualizer(it) }
+    } catch (_: Exception) {
+        null // на некоторых телефонах эквалайзер недоступен — играем без него
+    }
+
+    /** Пресеты в дБ на 60 / 230 / 910 / 3600 / 14000 Гц, раскладываем на полосы телефона. */
+    private fun applyEqualizer(eq: Equalizer?) {
+        eq ?: return
+        try {
+            val s = Prefs.settings.value
+            val gains = EQ_PRESETS[s.eqPreset] ?: if (s.eqPreset == "custom") s.eqCustom else null
+            if (gains == null) {
+                eq.enabled = false
+                return
+            }
+            val range = eq.bandLevelRange
+            for (b in 0 until eq.numberOfBands.toInt()) {
+                val hz = eq.getCenterFreq(b.toShort()) / 1000.0
+                val db = interpolate(hz, gains)
+                val mb = (db * 100).toInt().coerceIn(range[0].toInt(), range[1].toInt())
+                eq.setBandLevel(b.toShort(), mb.toShort())
+            }
+            eq.enabled = true
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun interpolate(hz: Double, gains: List<Int>): Double {
+        val lx = kotlin.math.ln(hz.coerceIn(EQ_FREQS.first(), EQ_FREQS.last()))
+        for (i in 0 until EQ_FREQS.size - 1) {
+            val a = kotlin.math.ln(EQ_FREQS[i])
+            val b = kotlin.math.ln(EQ_FREQS[i + 1])
+            if (lx <= b) {
+                val t = (lx - a) / (b - a)
+                return gains[i] + (gains[i + 1] - gains[i]) * t
+            }
+        }
+        return gains.last().toDouble()
+    }
+
     private fun mediaItem(st: Station, url: String): MediaItem = MediaItem.Builder()
         .setMediaId(st.id)
         .setUri(url)
@@ -612,6 +675,10 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun releaseSlot(s: Slot) {
         if (Prefs.settings.value.leveler) Prefs.setGain(s.stationId, s.leveler.gain)
+        try {
+            s.eq?.release()
+        } catch (_: Exception) {
+        }
         try {
             s.exo.stop()
             s.exo.release()
@@ -768,7 +835,10 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun onTick() {
         ticks++
-        if (ticks % 10 == 0) Traffic.flush()
+        if (ticks % 10 == 0) {
+            Traffic.flush()
+            Stats.flush()
+        }
         val a = active
         val now = SystemClock.uptimeMillis()
         var bufMs = 0L
@@ -776,6 +846,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             val exo = a.exo
             measureRx(a, now)
             readFormat(a)
+            if (exo.isPlaying) stationName(a.stationId)?.let { Stats.add(a.stationId, it, 500) }
             bufMs = exo.totalBufferedDuration
             val bp = exo.bufferedPosition
             if (bp > lastBuffered + 50) {
@@ -962,6 +1033,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             loading = isLoadingNow(),
             trackTitle = track?.title,
             trackArtist = track?.artist,
+            rawTrack = raw,
             bufferMs = bufMs,
             targetMs = a?.targetMs ?: s.targetBufferMs,
             offline = offline && userPlay,

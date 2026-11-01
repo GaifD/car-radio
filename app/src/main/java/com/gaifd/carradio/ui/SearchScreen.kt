@@ -267,7 +267,7 @@ private fun AddByUrl() {
                 Text(
                     if (checking) "Проверяю…" else "Проверить и добавить",
                     fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                    color = if (url.isBlank() || checking) C.muted else C.bg,
+                    color = if (url.isBlank() || checking) C.muted else C.onAccent,
                 )
             }
         }

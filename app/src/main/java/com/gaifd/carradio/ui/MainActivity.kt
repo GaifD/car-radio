@@ -57,7 +57,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.gaifd.carradio.data.Favorites
 import com.gaifd.carradio.data.History
+import com.gaifd.carradio.data.Logos
+import com.gaifd.carradio.data.RadioBrowser
+import com.gaifd.carradio.data.Stats
+import com.gaifd.carradio.data.UpdateState
+import com.gaifd.carradio.data.Updater
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Traffic
 import com.gaifd.carradio.data.Station
@@ -82,7 +94,22 @@ class MainActivity : ComponentActivity() {
     private var carLinked by mutableStateOf(false)
     private var showCarPicker by mutableStateOf(false)
     private var editStreamsId by mutableStateOf<String?>(null)
-    private var showHistory by mutableStateOf(false)
+    private var showDrive by mutableStateOf(false)
+    private var songsSegment by mutableIntStateOf(0)
+    private var searchQuery by mutableStateOf<String?>(null)
+    private var audioOut by mutableStateOf(AudioOut("Динамик телефона", false))
+    private var logoStatus by mutableStateOf<String?>(null)
+    private var pickLogoFor: String? = null
+    private lateinit var audioWatcher: AudioOutWatcher
+
+    private val pickLogoLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val id = pickLogoFor ?: return@registerForActivityResult
+        pickLogoFor = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            if (!Logos.fromUri(this@MainActivity, id, uri)) toast("Не удалось открыть картинку")
+        }
+    }
 
     private val exportLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@registerForActivityResult
@@ -125,6 +152,19 @@ class MainActivity : ComponentActivity() {
         StationRepo.init(this)
         History.init(this)
         Traffic.init(this)
+        Logos.init(this)
+        Favorites.init(this)
+        Stats.init(this)
+        audioWatcher = AudioOutWatcher(this) { audioOut = it }
+        RadioScreenActions.pickLogo = { id ->
+            pickLogoFor = id
+            pickLogoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+        // Обновления проверяем не чаще раза в 12 часов, тихо.
+        if (System.currentTimeMillis() - Prefs.lastUpdateCheck > 12 * 3600_000L) {
+            Prefs.lastUpdateCheck = System.currentTimeMillis()
+            lifecycleScope.launch { Updater.check() }
+        }
         autoplayRequested = intent?.getBooleanExtra(EXTRA_AUTOPLAY, false) == true
 
         if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
@@ -132,7 +172,21 @@ class MainActivity : ComponentActivity() {
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        setContent { CarRadioTheme { AppRoot() } }
+        setContent {
+            val settings by Prefs.settings.collectAsState()
+            val light = isLight(settings.theme)
+            LaunchedEffect(light) {
+                // Цвет значков в строке состояния под тему.
+                if (light) enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+                    navigationBarStyle = SystemBarStyle.light(Color.WHITE, Color.WHITE),
+                ) else enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                    navigationBarStyle = SystemBarStyle.dark(0xFF0D1215.toInt()),
+                )
+            }
+            CarRadioTheme(light) { AppRoot() }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -148,6 +202,7 @@ class MainActivity : ComponentActivity() {
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         controllerFuture = f
+        audioWatcher.start()
         f.addListener({
             try {
                 controller = f.get()
@@ -160,12 +215,31 @@ class MainActivity : ComponentActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    @Composable
+    private fun isLight(theme: Int): Boolean {
+        val systemDark = isSystemInDarkTheme()
+        // «По времени»: пересчитываем раз в минуту.
+        val hour by produceState(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
+            while (true) {
+                value = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                kotlinx.coroutines.delay(60_000)
+            }
+        }
+        return when (theme) {
+            com.gaifd.carradio.data.Settings.THEME_LIGHT -> true
+            com.gaifd.carradio.data.Settings.THEME_SYSTEM -> !systemDark
+            com.gaifd.carradio.data.Settings.THEME_BY_TIME -> hour in 7..18
+            else -> false
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         refresh()
     }
 
     override fun onStop() {
+        audioWatcher.stop()
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
         controller = null
@@ -310,15 +384,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Найти песню из истории: голосовой/веб-поиск, а если его нет — браузер. */
+    /** Нажали на песню — спрашиваем, где искать. */
     private fun searchTrack(track: String) {
-        try {
-            startActivity(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, track))
-        } catch (_: Exception) {
+        searchQuery = track
+    }
+
+    private fun openSearch(service: String, q: String) {
+        val enc = Uri.encode(q)
+        val tries = when (service) {
+            "ytmusic" -> listOf("https://music.youtube.com/search?q=$enc")
+            "spotify" -> listOf("spotify:search:$enc", "https://open.spotify.com/search/$enc")
+            else -> listOf("https://www.google.com/search?q=$enc")
+        }
+        for (u in tries) {
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(track))))
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
             } catch (_: Exception) {
             }
+        }
+        toast("Нечем открыть")
+    }
+
+    /** Логотипы для станций, у которых их нет: ищем в каталоге по названию. */
+    private fun fetchLogos() {
+        if (logoStatus?.startsWith("Ищу") == true) return
+        lifecycleScope.launch {
+            val list = StationRepo.stations.value.filter { !Logos.has(it.id) }
+            if (list.isEmpty()) {
+                logoStatus = "У всех станций уже есть логотипы"
+                return@launch
+            }
+            var found = 0
+            list.forEachIndexed { i, st ->
+                logoStatus = "Ищу… ${i + 1} из ${list.size}"
+                try {
+                    val url = st.logo.ifBlank { RadioBrowser.findLogo(st) ?: "" }
+                    if (url.isNotBlank() && Logos.download(st.id, url)) {
+                        if (st.logo != url) StationRepo.setLogo(st.id, url)
+                        found++
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            logoStatus = "Нашлось логотипов: $found из ${list.size}" +
+                if (found < list.size) ". Остальным можно поставить свою картинку: удерживай плитку." else ""
         }
     }
 
@@ -334,10 +444,22 @@ class MainActivity : ComponentActivity() {
         val settings by Prefs.settings.collectAsState()
         val history by History.items.collectAsState()
 
-        if (showHistory) {
-            BackHandler { showHistory = false }
+        val updateState by Updater.state.collectAsState()
+        val updateVersion = (updateState as? UpdateState.Available)?.info?.version
+
+        LaunchedEffect(stations) { Logos.ensure(stations) }
+
+        if (showDrive) {
+            BackHandler { showDrive = false }
             Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
-                HistoryScreen(history, onBack = { showHistory = false }, onSearch = ::searchTrack)
+                DriveScreen(
+                    st = stations.firstOrNull { it.id == ui.stationId } ?: stations.firstOrNull(),
+                    ui = ui,
+                    onToggle = ::toggle,
+                    onPrev = { controller?.seekToPreviousMediaItem() },
+                    onNext = { controller?.seekToNextMediaItem() },
+                    onClose = { showDrive = false },
+                )
             }
             return
         }
@@ -361,10 +483,15 @@ class MainActivity : ComponentActivity() {
                         onNext = { controller?.seekToNextMediaItem() },
                         onGoAdd = { tab = 1 },
                         onEditStreams = { editStreamsId = it.id },
-                        onOpenHistory = { showHistory = true },
+                        onOpenHistory = { songsSegment = 1; tab = 2 },
                         onSearchTrack = ::searchTrack,
+                        output = audioOut,
+                        update = updateVersion,
+                        onUpdate = { tab = 3 },
+                        onDrive = { showDrive = true },
                     )
                     1 -> SearchScreen(stations, settings)
+                    2 -> SongsScreen(songsSegment, { songsSegment = it }, history, ::searchTrack)
                     else -> SettingsScreen(
                         s = settings,
                         sys = SystemStatus(batteryOk, notificationsOk, bluetoothOk, carLinked),
@@ -375,12 +502,21 @@ class MainActivity : ComponentActivity() {
                         onAppSettings = ::openAppSettings,
                         onExport = { exportLauncher.launch("avtoradio-stations.json") },
                         onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+                        stations = stations,
+                        logoStatus = logoStatus,
+                        onFetchLogos = ::fetchLogos,
+                        onCheckUpdate = { lifecycleScope.launch { Updater.check() } },
+                        onDownloadUpdate = { info -> lifecycleScope.launch { Updater.download(this@MainActivity, info) } },
+                        onInstallUpdate = { f -> Updater.install(this@MainActivity, f) },
                     )
                 }
             }
         }
 
         editStreamsId?.let { id -> StreamsDialog(id, onDismiss = { editStreamsId = null }) }
+        searchQuery?.let { q ->
+            SearchChooser(q, onPick = { svc -> searchQuery = null; openSearch(svc, q) }, onDismiss = { searchQuery = null })
+        }
 
         if (showCarPicker) {
             CarPickerDialog(
@@ -404,7 +540,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 NavItem("Радио", Ic.radio, tab == 0, Modifier.weight(1f)) { onTab(0) }
                 NavItem("Добавить", Ic.search, tab == 1, Modifier.weight(1f)) { onTab(1) }
-                NavItem("Настройки", Ic.sliders, tab == 2, Modifier.weight(1f)) { onTab(2) }
+                NavItem("Песни", Ic.heart, tab == 2, Modifier.weight(1f)) { onTab(2) }
+                NavItem("Настройки", Ic.sliders, tab == 3, Modifier.weight(1f)) { onTab(3) }
             }
         }
     }

@@ -32,7 +32,19 @@ import androidx.compose.ui.unit.sp
 import com.gaifd.carradio.BuildConfig
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.Settings
+import com.gaifd.carradio.data.Station
 import com.gaifd.carradio.data.Traffic
+import com.gaifd.carradio.data.UpdateInfo
+import com.gaifd.carradio.data.UpdateState
+import com.gaifd.carradio.data.Updater
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 class SystemStatus(
     val batteryOk: Boolean,
@@ -52,6 +64,12 @@ fun SettingsScreen(
     onAppSettings: () -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    stations: List<Station>,
+    logoStatus: String?,
+    onFetchLogos: () -> Unit,
+    onCheckUpdate: () -> Unit,
+    onDownloadUpdate: (UpdateInfo) -> Unit,
+    onInstallUpdate: (java.io.File) -> Unit,
 ) {
     Column(
         Modifier
@@ -60,6 +78,36 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp)
     ) {
         ScreenTitle("Настройки")
+
+        // ---- Вид ----
+        Card(padding = 16) {
+            CardTitle("Вид")
+            Text("Тема", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Segmented(
+                listOf(Settings.THEME_DARK to "Тёмная", Settings.THEME_LIGHT to "Светлая", Settings.THEME_SYSTEM to "Как в системе", Settings.THEME_BY_TIME to "По времени"),
+                s.theme, small = true,
+            ) { v -> Prefs.update { it.copy(theme = v) } }
+            if (s.theme == Settings.THEME_BY_TIME) {
+                Text("светлая с 7:00 до 19:00, остальное время тёмная", fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 6.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("Список станций", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Segmented(
+                listOf(Settings.VIEW_GRID to "Плитки", Settings.VIEW_LIST to "Список", Settings.VIEW_BIG to "Крупно", Settings.VIEW_COMPACT to "Компакт"),
+                s.stationView, small = true,
+            ) { v -> Prefs.update { it.copy(stationView = v) } }
+            Spacer(Modifier.height(6.dp))
+            ActionRow(
+                title = "Подтянуть логотипы",
+                hint = logoStatus ?: "найти в каталоге логотипы для станций, у которых их нет",
+                icon = Ic.image,
+                divider = false,
+                onClick = onFetchLogos,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
 
         // ---- Автозапуск ----
         Card(padding = 16) {
@@ -94,6 +142,19 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     Segmented(listOf(0 to "сразу", 30 to "30 с", 60 to "60 с"), s.warmupSec) { v ->
                         Prefs.update { it.copy(warmupSec = v) }
+                    }
+                }
+                Divider()
+            }
+            ToggleRow("Станция по расписанию", "при автозапуске утром одна станция, вечером другая", s.scheduleOn) { v ->
+                Prefs.update { it.copy(scheduleOn = v) }
+            }
+            if (s.scheduleOn) {
+                Column(Modifier.padding(vertical = 6.dp)) {
+                    Settings.PERIODS.forEach { (key, label) ->
+                        ScheduleRow(label, s.schedule[key], stations) { id ->
+                            Prefs.update { it.copy(schedule = if (id == null) it.schedule - key else it.schedule + (key to id)) }
+                        }
                     }
                 }
                 Divider()
@@ -203,6 +264,42 @@ fun SettingsScreen(
                 "станции звучат одинаково громко; подстраивается плавно, за несколько секунд",
                 s.leveler,
             ) { v -> Prefs.update { it.copy(leveler = v) } }
+            Column(Modifier.padding(vertical = 10.dp)) {
+                Text("Эквалайзер", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                val presets = listOf("off" to "Выкл", "bass" to "Бас", "voice" to "Голос", "car" to "Машина", "soft" to "Мягче", "custom" to "Свой")
+                presets.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                        row.forEach { (id, label) -> Chip(label, s.eqPreset == id) { Prefs.update { it.copy(eqPreset = id) } } }
+                    }
+                }
+                if (s.eqPreset == "custom") {
+                    listOf("60 Гц", "230 Гц", "910 Гц", "3.6 кГц", "14 кГц").forEachIndexed { i, label ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, fontSize = 12.sp, color = C.muted, modifier = Modifier.width(64.dp))
+                            Slider(
+                                value = s.eqCustom[i].toFloat(),
+                                onValueChange = { v ->
+                                    Prefs.update { st -> st.copy(eqCustom = st.eqCustom.toMutableList().also { it[i] = v.toInt() }) }
+                                },
+                                valueRange = -6f..6f,
+                                steps = 11,
+                                modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(thumbColor = C.accent, activeTrackColor = C.accent, inactiveTrackColor = C.border),
+                            )
+                            Text(
+                                (if (s.eqCustom[i] > 0) "+" else "") + "${s.eqCustom[i]}",
+                                fontSize = 12.sp, fontFamily = Chakra, modifier = Modifier.width(28.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "«Машина» — чуть больше баса и верхов, «Голос» — разборчивее новости и ток-шоу.",
+                    fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
+                )
+            }
+            Divider()
             ToggleRow(
                 "Трек на экране магнитолы",
                 "песня, исполнитель и станция вместо «Bluetooth Audio»",
@@ -213,6 +310,10 @@ fun SettingsScreen(
         // ---- Трафик ----
         Spacer(Modifier.height(10.dp))
         TrafficCard()
+
+        // ---- Обновления ----
+        Spacer(Modifier.height(10.dp))
+        UpdatesCard(onCheckUpdate, onDownloadUpdate, onInstallUpdate)
 
         // ---- Станции ----
         Spacer(Modifier.height(10.dp))
@@ -290,7 +391,7 @@ private fun Divider() {
 }
 
 @Composable
-private fun Segmented(options: List<Pair<Int, String>>, selected: Int, onSelect: (Int) -> Unit) {
+private fun Segmented(options: List<Pair<Int, String>>, selected: Int, small: Boolean = false, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -312,11 +413,82 @@ private fun Segmented(options: List<Pair<Int, String>>, selected: Int, onSelect:
             ) {
                 Text(
                     label,
-                    fontSize = 13.sp,
+                    fontSize = if (small) 11.sp else 13.sp,
+                    maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 13.sp,
                     fontWeight = if (sel) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (sel) C.accent else C.soft,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleRow(label: String, stationId: String?, stations: List<Station>, onPick: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val name = stations.firstOrNull { it.id == stationId }?.name ?: "последняя"
+    Box {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { open = true }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, fontSize = 13.sp, color = C.soft, modifier = Modifier.weight(1f))
+            Text(name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (stationId != null) C.accent else C.muted)
+            Icon(Ic.chevronDown, null, tint = C.muted, modifier = Modifier.padding(start = 4.dp).size(16.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(C.card)) {
+            DropdownMenuItem(text = { Text("Последняя станция", color = C.text) }, onClick = { onPick(null); open = false })
+            stations.forEach { st ->
+                DropdownMenuItem(text = { Text(st.name, color = C.text) }, onClick = { onPick(st.id); open = false })
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdatesCard(onCheck: () -> Unit, onDownload: (UpdateInfo) -> Unit, onInstall: (java.io.File) -> Unit) {
+    val st by Updater.state.collectAsState()
+    Card(padding = 16) {
+        CardTitle("Обновления")
+        Text("Установлена версия ${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = C.soft)
+        Spacer(Modifier.height(10.dp))
+        when (val u = st) {
+            is UpdateState.Checking -> Text("Проверяю…", fontSize = 13.sp, color = C.muted)
+            is UpdateState.Available -> {
+                Text("Доступна версия ${u.info.version}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = C.accent)
+                if (u.info.notes.isNotBlank()) {
+                    Text(u.info.notes, fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, maxLines = 8, modifier = Modifier.padding(vertical = 6.dp))
+                }
+                PillButton("Скачать и установить", filled = true) { onDownload(u.info) }
+            }
+            is UpdateState.Downloading -> {
+                Text("Скачиваю ${u.info.version}… ${(u.progress * 100).toInt()}%", fontSize = 13.sp, color = C.soft)
+                Spacer(Modifier.height(6.dp))
+                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.line)) {
+                    Box(Modifier.fillMaxWidth(u.progress.coerceAtLeast(0.02f)).height(6.dp).background(C.accent))
+                }
+            }
+            is UpdateState.Ready -> {
+                Text("Версия ${u.info.version} скачана", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Если Android попросит — разреши установку из «Авторадио». Станции и настройки сохранятся.",
+                    fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(vertical = 6.dp),
+                )
+                PillButton("Установить", filled = true) { onInstall(u.file) }
+            }
+            is UpdateState.UpToDate -> {
+                Text("Это последняя версия", fontSize = 13.sp, color = C.muted)
+                Spacer(Modifier.height(8.dp))
+                PillButton("Проверить ещё раз", filled = false, onClick = onCheck)
+            }
+            is UpdateState.Failed -> {
+                Text(u.message, fontSize = 13.sp, color = C.amber)
+                Spacer(Modifier.height(8.dp))
+                PillButton("Попробовать снова", filled = false, onClick = onCheck)
+            }
+            is UpdateState.Idle -> PillButton("Проверить обновления", filled = false, onClick = onCheck)
         }
     }
 }

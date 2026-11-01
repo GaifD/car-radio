@@ -18,7 +18,10 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.gaifd.carradio.R
 import com.gaifd.carradio.data.History
+import com.gaifd.carradio.data.Logos
 import com.gaifd.carradio.data.Prefs
+import com.gaifd.carradio.data.Settings
+import com.gaifd.carradio.data.Stats
 import com.gaifd.carradio.data.Traffic
 import com.gaifd.carradio.data.StationRepo
 import com.gaifd.carradio.ui.MainActivity
@@ -63,6 +66,8 @@ class PlaybackService : MediaSessionService() {
         StationRepo.init(this)
         History.init(this)
         Traffic.init(this)
+        Logos.init(this)
+        Stats.init(this)
         player = CrossfadePlayer(this)
         val open = PendingIntent.getActivity(
             this, 0,
@@ -93,6 +98,11 @@ class PlaybackService : MediaSessionService() {
                 val s = Prefs.settings.value
                 val fromCar = intent.getBooleanExtra(EXTRA_FROM_CAR, false)
                 if (fromCar && s.limitStartVolume) capVolume()
+                // Станция по расписанию: утром одна, вечером другая (только при автозапуске из машины).
+                if (fromCar && s.scheduleOn) {
+                    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                    s.schedule[Settings.periodAt(hour)]?.let { player.selectById(it) }
+                }
                 intent.getStringExtra(EXTRA_STATION)?.let { player.selectById(it) }
                 player.play()
                 // Прогрев: пока машина греется, радио молча копит запас и потом начинает играть.
