@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+# Шрифты скачиваются при сборке (см. .github/workflows/build.yml)
+app/src/main/res/font/
