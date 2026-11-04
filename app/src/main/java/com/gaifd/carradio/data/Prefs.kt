@@ -9,7 +9,6 @@ data class Settings(
     val crossfadeMs: Int = 1500,
     val bufferSec: Int = 30,
     val growBuffer: Boolean = true,
-    val smartPause: Boolean = true,
     val highway: Boolean = false,
     val bufferMode: Int = BUFFER_OFF,
     val fallback: Boolean = true,
@@ -93,7 +92,6 @@ object Prefs {
             crossfadeMs = sp.getInt("crossfadeMs", d.crossfadeMs),
             bufferSec = sp.getInt("bufferSec", d.bufferSec),
             growBuffer = sp.getBoolean("growBuffer", d.growBuffer),
-            smartPause = sp.getBoolean("smartPause", d.smartPause),
             highway = sp.getBoolean("highway", d.highway),
             bufferMode = sp.getInt("bufferMode", d.bufferMode),
             fallback = sp.getBoolean("fallback", d.fallback),
@@ -131,7 +129,6 @@ object Prefs {
             .putInt("crossfadeMs", s.crossfadeMs)
             .putInt("bufferSec", s.bufferSec)
             .putBoolean("growBuffer", s.growBuffer)
-            .putBoolean("smartPause", s.smartPause)
             .putBoolean("highway", s.highway)
             .putInt("bufferMode", s.bufferMode)
             .putBoolean("fallback", s.fallback)

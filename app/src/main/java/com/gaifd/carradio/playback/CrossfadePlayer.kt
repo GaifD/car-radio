@@ -74,7 +74,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private companion object {
         const val SWITCH_DEBOUNCE_MS = 450L     // быстрое листание кнопками: грузим только конечную станцию
         const val INCOMING_TIMEOUT_MS = 20_000L
-        const val STALE_PAUSE_MS = 20_000L      // без «умной паузы»: после такой паузы — заново к эфиру
         const val LIVE_PAUSE_MS = 3_000L        // буфер выключен: после паузы сразу к живому эфиру
         const val SLOW_SPEED = 0.97f            // копим буфер: на 3% медленнее, высота звука не меняется
         const val OFFLINE_AFTER_MS = 4_000L
@@ -114,8 +113,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     /** Один внутренний плеер и всё, что к нему относится. */
     private inner class Slot(val stationId: String, val streamIdx: Int, val stream: Stream, val targetMs: Long, val noFade: Boolean) {
-        /** Отставание из-за пауз: сколько простояли на паузе и продолжили с того же места. Сбрасывается при переподключении. */
-        var pauseLagMs = 0L
         val counter = AtomicLong(0)
         val leveler = Leveler(Prefs.gain(stationId)).also { it.enabled = Prefs.settings.value.leveler }
         val exo: ExoPlayer = buildExo(this)
@@ -417,16 +414,11 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val a = active
         if (!reload && streamIndex == null && a != null && a.stationId == st.id && incoming == null) {
             val pausedFor = SystemClock.uptimeMillis() - pausedAt
-            // Умная пауза: пока пауза не дольше запаса — продолжаем с того же места, буфер не теряем.
-            val limit = when {
-                !s.bufferOn(metered) -> LIVE_PAUSE_MS
-                s.smartPause -> max(a.targetMs + 5_000, 30_000)
-                else -> STALE_PAUSE_MS
-            }
+            // Пауза короче буфера — продолжаем с того же места, ничего не пропускаем.
+            // Дольше (или буфер выключен) — подключаемся к живому эфиру.
+            val limit = if (s.bufferOn(metered)) a.targetMs else LIVE_PAUSE_MS
             val stale = !a.exo.isPlaying && pausedAt > 0 && pausedFor > limit
             if (a.exo.playbackState != Player.STATE_IDLE && !stale) {
-                // Продолжаем с того же места — отстаём от эфира на длину паузы.
-                if (pausedAt > 0 && !a.exo.isPlaying) a.pauseLagMs += pausedFor
                 pausedAt = 0
                 if (!transientLoss) a.exo.play()
                 a.exo.volume = level()
@@ -739,7 +731,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 handler.postDelayed({
                     if (slot === active && userPlay) {
                         // Новое соединение: станция отдаёт только «сейчас», пропущенное не вернуть.
-                        slot.pauseLagMs = 0
                         reconnected = true
                         exo.seekToDefaultPosition()
                         exo.prepare()
@@ -848,7 +839,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                         else "Связь пропадала на $gone с"
                         noticeUntil = now + 15_000
                     }
-                    if (reconnected) a.pauseLagMs = 0
                     reconnected = false
                     offline = false
                     offlineSince = 0
@@ -1034,7 +1024,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             rxKbps = if (a != null) rxKbps.toInt() else 0,
             highway = s.highway,
             bufferOn = s.bufferOn(metered),
-            lagMs = a?.pauseLagMs ?: 0L,
             notice = notice?.takeIf { SystemClock.uptimeMillis() < noticeUntil },
         )
         // Виджет обновляем только когда что-то видимое поменялось.

@@ -307,13 +307,12 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
     }
     ui.notice?.let { Text(it, fontSize = 12.sp, color = C.muted, lineHeight = 16.sp) }
 
-    // «В прямой эфир» = сбросить буфер: когда запас заметный или стояли на паузе.
-    val pauseLag = (ui.lagMs / 1000).toInt()
-    val canGoLive = ui.playing && !ui.loading && !ui.offline && (ui.bufferMs >= 10_000 || ui.lagMs >= 5_000)
+    // «В прямой эфир» = сбросить буфер, когда запас (он же отставание от эфира) заметный.
+    val canGoLive = ui.playing && !ui.loading && !ui.offline && ui.bufferMs >= 10_000
     if (canGoLive) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (pauseLag >= 5) "после паузы отстаёт ещё на $pauseLag с" else "буфер = отставание от эфира",
+                "слышишь эфир $sec с назад",
                 fontSize = 12.sp, color = C.muted, modifier = Modifier.weight(1f),
             )
             Box(

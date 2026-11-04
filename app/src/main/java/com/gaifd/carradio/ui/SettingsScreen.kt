@@ -231,18 +231,14 @@ fun SettingsScreen(
             ) { v -> Prefs.update { it.copy(highway = v) } }
             if (s.bufferMode != Settings.BUFFER_OFF || s.highway) {
                 ToggleRow(
-                    "Умная пауза",
-                    "короткая пауза продолжает с того же места и не сбрасывает запас",
-                    s.smartPause,
-                ) { v -> Prefs.update { it.copy(smartPause = v) } }
-                ToggleRow(
                     "Копить буфер на ходу",
                     "играет на 3% медленнее, пока запас не наберётся; высота звука не меняется",
                     s.growBuffer, divider = false,
                 ) { v -> Prefs.update { it.copy(growBuffer = v) } }
             }
             Text(
-                "Буфер — это и есть отставание от эфира. Кнопка «В прямой эфир» на главной сбрасывает его: свежий поток с плавным переходом.",
+                "Буфер — это и есть отставание от эфира. Кнопка «В прямой эфир» на главной сбрасывает его: свежий поток с плавным переходом.\n" +
+                    "Пауза короче буфера — продолжит с того же места, ничего не пропустишь. Дольше или буфер выключен — сразу живой эфир.",
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp),
             )
         }
