@@ -74,6 +74,31 @@ data class Station(
         fun words(s: String): List<String> =
             s.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotBlank() && it.lowercase() !in STOP_WORDS }
 
+        /** Слова, которые не отличают подканал: страна, город, качество, «main». */
+        private val GENERIC = setOf(
+            "ukraine", "ua", "ukr", "україна", "украина", "kyiv", "kiev", "київ", "киев",
+            "main", "live", "hd", "hq", "mp3", "aac", "kbps", "stream", "official",
+        )
+
+        /**
+         * Подписи подканалов: станции одного бренда (одинаковое первое слово — «Hit FM …», «ХІТ FM», «Melodia FM …»)
+         * получают на логотипе своё отличие: «Best», «Disco», «Modern hits». Основная станция бренда — без подписи.
+         */
+        fun badges(list: List<Station>): Map<String, String> {
+            val groups = list.groupBy { st -> words(st.name).firstOrNull()?.let { normalizeName(it) } ?: "" }
+            val out = HashMap<String, String>()
+            for ((brand, group) in groups) {
+                if (brand.length < 2 || group.size < 2) continue
+                for (st in group) {
+                    val rest = words(st.name).drop(1).filter { w ->
+                        w.lowercase() !in GENERIC && w.any { it.isLetter() }
+                    }
+                    if (rest.isNotEmpty()) out[st.id] = rest.joinToString(" ")
+                }
+            }
+            return out
+        }
+
         /** Для сравнения названий: регистр, «FM/радио», украинские буквы и латиница — не важны. */
         fun normalizeName(s: String): String {
             val words = s.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotBlank() && it !in STOP_WORDS }

@@ -108,13 +108,15 @@ fun Monogram(text: String, size: Int, active: Boolean, big: Boolean = false, see
 @Composable
 fun StationLogo(st: com.gaifd.carradio.data.Station, size: Int, active: Boolean, big: Boolean = false) {
     val ver by com.gaifd.carradio.data.Logos.version.collectAsState()
+    val all by com.gaifd.carradio.data.StationRepo.stations.collectAsState()
+    val badges = remember(all) { com.gaifd.carradio.data.Station.badges(all) }
     val bmp = remember(st.id, ver) { com.gaifd.carradio.data.Logos.bitmap(st.id)?.asImageBitmap() }
     if (bmp == null) {
         Monogram(st.short, size, active, big, seed = st.name)
         return
     }
     val shape = RoundedCornerShape((size / 3.5f).dp)
-    val badge = st.logoBadge.takeIf { it.isNotBlank() && size >= 40 }
+    val badge = badges[st.id]?.takeIf { size >= 40 }
     Box(
         Modifier
             .size(size.dp)
@@ -140,10 +142,13 @@ fun StationLogo(st: com.gaifd.carradio.data.Station, size: Int, active: Boolean,
                     .padding(vertical = (size / 40).coerceAtLeast(1).dp),
                 contentAlignment = Alignment.Center,
             ) {
+                // Шрифт подбирается под ширину, чтобы длинное «International» влезало целиком.
+                val fit = ((size - 8f) / (badge.length * 0.6f)).coerceAtMost(size / 6.5f)
+                val fs = fit.coerceIn(7f, 18f)
                 Text(
                     badge,
-                    fontSize = (size / 6.5f).coerceIn(8f, 18f).sp,
-                    lineHeight = (size / 6.5f).coerceIn(8f, 18f).sp,
+                    fontSize = fs.sp,
+                    lineHeight = fs.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                     maxLines = 1,
