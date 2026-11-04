@@ -201,19 +201,24 @@ fun SettingsScreen(
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
             )
             Spacer(Modifier.height(10.dp))
+            // Один переключатель на всё: «Трасса» — четвёртый вариант, чтобы было видно, что реально работает.
+            val HIGHWAY = 99
             Segmented(
-                listOf(Settings.BUFFER_OFF to "Выкл", Settings.BUFFER_ON to "Вкл", Settings.BUFFER_AUTO to "Авто"),
-                s.bufferMode,
-            ) { v -> Prefs.update { it.copy(bufferMode = v) } }
+                listOf(Settings.BUFFER_OFF to "Выкл", Settings.BUFFER_ON to "Вкл", Settings.BUFFER_AUTO to "Авто", HIGHWAY to "Трасса"),
+                if (s.highway) HIGHWAY else s.bufferMode,
+            ) { v ->
+                Prefs.update { if (v == HIGHWAY) it.copy(highway = true) else it.copy(bufferMode = v, highway = false) }
+            }
             Text(
-                when (s.bufferMode) {
-                    Settings.BUFFER_ON -> "копится всегда"
-                    Settings.BUFFER_AUTO -> "копится на мобильном интернете и точке доступа с телефона, на домашнем Wi-Fi — нет"
+                when {
+                    s.highway -> "запас до 3 минут для поездок за город. Выключить — кнопкой «Трасса» на главной или выбрать другой режим здесь"
+                    s.bufferMode == Settings.BUFFER_ON -> "копится всегда"
+                    s.bufferMode == Settings.BUFFER_AUTO -> "копится на мобильном интернете и точке доступа с телефона, на домашнем Wi-Fi — нет"
                     else -> "только несколько секунд, без которых поток не играет; после паузы — сразу прямой эфир"
                 },
                 fontSize = 12.sp, color = C.muted, lineHeight = 16.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp),
             )
-            if (s.bufferMode != Settings.BUFFER_OFF) {
+            if (s.bufferMode != Settings.BUFFER_OFF && !s.highway) {
                 Divider()
                 Column(Modifier.padding(vertical = 10.dp)) {
                     Text("Размер запаса", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -223,13 +228,8 @@ fun SettingsScreen(
                     }
                 }
             }
-            Divider()
-            ToggleRow(
-                "Режим «Трасса»",
-                "запас до 3 минут для поездок за город; включает буфер, даже если он выключен. Есть кнопка на главном экране",
-                s.highway,
-            ) { v -> Prefs.update { it.copy(highway = v) } }
             if (s.bufferMode != Settings.BUFFER_OFF || s.highway) {
+                Divider()
                 ToggleRow(
                     "Копить буфер на ходу",
                     "играет на 3% медленнее, пока запас не наберётся; высота звука не меняется",
