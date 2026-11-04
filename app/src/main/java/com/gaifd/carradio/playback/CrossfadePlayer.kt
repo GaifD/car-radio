@@ -114,8 +114,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     /** Один внутренний плеер и всё, что к нему относится. */
     private inner class Slot(val stationId: String, val streamIdx: Int, val stream: Stream, val targetMs: Long, val noFade: Boolean) {
-        /** Когда начал звучать: отставание от эфира = прошло времени − сколько проиграно. */
-        var liveSince = 0L
+        /** Отставание из-за пауз: сколько простояли на паузе и продолжили с того же места. Сбрасывается при переподключении. */
+        var pauseLagMs = 0L
         val counter = AtomicLong(0)
         val leveler = Leveler(Prefs.gain(stationId)).also { it.enabled = Prefs.settings.value.leveler }
         val exo: ExoPlayer = buildExo(this)
@@ -152,6 +152,9 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private var offline = false
     private var offlineSince = 0L
+    private var notice: String? = null
+    private var noticeUntil = 0L
+    private var reconnected = false
     private var lastFailoverAt = 0L
     private var lowSince = 0L
     private var lastBuffered = 0L
@@ -422,6 +425,9 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             }
             val stale = !a.exo.isPlaying && pausedAt > 0 && pausedFor > limit
             if (a.exo.playbackState != Player.STATE_IDLE && !stale) {
+                // Продолжаем с того же места — отстаём от эфира на длину паузы.
+                if (pausedAt > 0 && !a.exo.isPlaying) a.pauseLagMs += pausedFor
+                pausedAt = 0
                 if (!transientLoss) a.exo.play()
                 a.exo.volume = level()
                 invalidate()
@@ -455,13 +461,15 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         tried.clear()
         offline = false
         offlineSince = 0
+        reconnected = false
+        if (inc.stationId != old?.stationId) notice = null
         lowSince = 0
         skipCount = 0
         if (error?.contains("запасн") != true && error?.contains("облегч") != true) error = null
         lastBuffered = 0
         lastGrowAt = SystemClock.uptimeMillis()
         inc.title?.let { t -> stationName(inc.stationId)?.let { History.add(it, t) } }
-        inc.liveSince = SystemClock.elapsedRealtime()
+        pausedAt = 0
 
         val dur = if (inc.noFade) 0L else Prefs.settings.value.crossfadeMs.toLong()
         when {
@@ -730,6 +738,9 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 offline = true
                 handler.postDelayed({
                     if (slot === active && userPlay) {
+                        // Новое соединение: станция отдаёт только «сейчас», пропущенное не вернуть.
+                        slot.pauseLagMs = 0
+                        reconnected = true
                         exo.seekToDefaultPosition()
                         exo.prepare()
                         if (!transientLoss) exo.play()
@@ -830,6 +841,15 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 lastBuffered = bp
                 lastGrowAt = now
                 if (offline) {
+                    // Связь вернулась — коротко сообщаем, сколько её не было.
+                    val gone = ((now - offlineSince) / 1000).toInt()
+                    if (offlineSince > 0 && gone >= 3) {
+                        notice = if (reconnected) "Связь пропадала на $gone с — переподключился к эфиру"
+                        else "Связь пропадала на $gone с"
+                        noticeUntil = now + 15_000
+                    }
+                    if (reconnected) a.pauseLagMs = 0
+                    reconnected = false
                     offline = false
                     offlineSince = 0
                 }
@@ -969,12 +989,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     // ---------- Вспомогательное ----------
 
-    /** Отставание от эфира с момента подключения: паузы, замедление, подгрузки. */
-    private fun lag(a: Slot): Long {
-        if (a.liveSince == 0L) return 0
-        val elapsed = SystemClock.elapsedRealtime() - a.liveSince
-        return (elapsed - a.exo.currentPosition).coerceAtLeast(0)
-    }
 
     private fun currentIndex() = stations.indexOfFirst { it.id == currentId }
 
@@ -1020,7 +1034,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             rxKbps = if (a != null) rxKbps.toInt() else 0,
             highway = s.highway,
             bufferOn = s.bufferOn(metered),
-            lagMs = a?.let { lag(it) } ?: 0L,
+            lagMs = a?.pauseLagMs ?: 0L,
+            notice = notice?.takeIf { SystemClock.uptimeMillis() < noticeUntil },
         )
         // Виджет обновляем только когда что-то видимое поменялось.
         val name = stations.firstOrNull { it.id == currentId }?.name ?: "Авторадио"

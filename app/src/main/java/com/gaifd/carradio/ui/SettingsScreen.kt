@@ -242,7 +242,7 @@ fun SettingsScreen(
                 ) { v -> Prefs.update { it.copy(growBuffer = v) } }
             }
             Text(
-                "Отстаёшь от эфира — на главном экране кнопка «В прямой эфир»: свежий поток с плавным переходом.",
+                "Буфер — это и есть отставание от эфира. Кнопка «В прямой эфир» на главной сбрасывает его: свежий поток с плавным переходом.",
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp),
             )
         }

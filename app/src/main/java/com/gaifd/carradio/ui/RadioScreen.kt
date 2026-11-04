@@ -259,64 +259,71 @@ private fun NowPlaying(
 
 @Composable
 private fun BufferBar(ui: RadioUi, settings: Settings) {
-    val sec = (ui.bufferMs / 1000).toInt()
-    val lag = (ui.lagMs / 1000).toInt()
-    val canGoLive = ui.playing && !ui.loading && !ui.offline && ui.lagMs >= 5_000
-
-    // Буфер включён — полоска запаса. Выключен — только «в прямом эфире» / отставание после паузы.
-    if (ui.bufferOn || ui.offline) {
-        val goal = (ui.targetMs / 1000).toInt()
-        val right = when {
-            !ui.playing -> ""
-            ui.offline -> "хватит ещё на $sec с"
-            ui.loading -> "подключаюсь"
-            ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
-            else -> "поток стабилен"
+    // Буфер выключен: ни полоски, ни отставания — только «нет связи», если она пропала.
+    if (!ui.bufferOn) {
+        if (ui.playing && ui.offline) {
+            Text("нет связи · переподключаюсь", fontSize = 12.sp, color = C.amber)
         }
-        val color = if (ui.offline) C.amber else C.accent
-        val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth()) {
-                Text("Буфер ", fontSize = 12.sp, color = C.muted)
-                Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
-                Spacer(Modifier.weight(1f))
-                Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
-            }
+        ui.notice?.let { Text(it, fontSize = 12.sp, color = C.muted, lineHeight = 16.sp) }
+        return
+    }
+
+    // Буфер включён: одно число — сколько звука в запасе. На столько же и отстаёшь от эфира.
+    val sec = (ui.bufferMs / 1000).toInt()
+    val goal = (ui.targetMs / 1000).toInt()
+    val right = when {
+        !ui.playing -> ""
+        ui.offline -> "нет связи · хватит на $sec с"
+        ui.loading -> "подключаюсь"
+        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
+        else -> "полный"
+    }
+    val color = if (ui.offline) C.amber else C.accent
+    val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            Text("Буфер ", fontSize = 12.sp, color = C.muted)
+            Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
+            Spacer(Modifier.weight(1f))
+            Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(C.line)
+        ) {
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
+                    .fillMaxHeight()
+                    .fillMaxWidth(frac)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(C.line)
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(frac)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(color)
-                )
-            }
+                    .background(color)
+            )
         }
     }
-    if (ui.playing && !ui.loading && !ui.offline) {
+    ui.notice?.let { Text(it, fontSize = 12.sp, color = C.muted, lineHeight = 16.sp) }
+
+    // «В прямой эфир» = сбросить буфер: когда запас заметный или стояли на паузе.
+    val pauseLag = (ui.lagMs / 1000).toInt()
+    val canGoLive = ui.playing && !ui.loading && !ui.offline && (ui.bufferMs >= 10_000 || ui.lagMs >= 5_000)
+    if (canGoLive) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                if (lag >= 2) "отстаёт от эфира на $lag с" else "прямой эфир",
+                if (pauseLag >= 5) "после паузы отстаёт ещё на $pauseLag с" else "буфер = отставание от эфира",
                 fontSize = 12.sp, color = C.muted, modifier = Modifier.weight(1f),
             )
-            if (canGoLive) {
-                Box(
-                    Modifier
-                        .heightIn(min = 36.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .border(1.dp, C.accent, RoundedCornerShape(99.dp))
-                        .clickable { RadioBus.control?.goLive() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("В прямой эфир", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent)
-                }
+            Box(
+                Modifier
+                    .heightIn(min = 36.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .border(1.dp, C.accent, RoundedCornerShape(99.dp))
+                    .clickable { RadioBus.control?.goLive() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("В прямой эфир", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent)
             }
         }
     }

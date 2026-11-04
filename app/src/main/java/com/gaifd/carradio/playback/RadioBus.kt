@@ -20,7 +20,8 @@ data class RadioUi(
     val bitrateKbps: Int = 0,           // битрейт потока
     val rxKbps: Int = 0,                // сколько реально приходит из сети
     val bufferOn: Boolean = false,      // буфер копится (включён, «Авто» на мобильном или «Трасса»)
-    val lagMs: Long = 0,                // насколько отстаём от живого эфира
+    val lagMs: Long = 0,                // отставание из-за паузы (продолжили с того же места)
+    val notice: String? = null,         // «связь пропадала на N с» — на несколько секунд
     val highway: Boolean = false,
 )
 
