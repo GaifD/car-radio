@@ -19,6 +19,7 @@ data class FoundStation(
     val country: String,
     val tags: String,
     val favicon: String = "",
+    val homepage: String = "",
 ) {
     val meta: String
         get() = listOf(
@@ -33,6 +34,7 @@ data class FoundStation(
         bitrate = bitrate,
         alts = alts,
         logo = favicon,
+        homepage = homepage,
         genre = tags.split(',').map { it.trim() }.filter { it.isNotBlank() }.take(2)
             .joinToString(" · ") { it.replaceFirstChar { c -> c.uppercase() } },
     )
@@ -73,6 +75,7 @@ object RadioBrowser {
                         country = o.optString("countrycode"),
                         tags = o.optString("tags"),
                         favicon = o.optString("favicon").takeIf { it.startsWith("http") } ?: "",
+                        homepage = o.optString("homepage").takeIf { it.startsWith("http") } ?: "",
                     )
                 }
                 return@withContext list
@@ -93,12 +96,12 @@ object RadioBrowser {
         return sameStation(key, found, st.streams.map { it.url }.toSet())
     }
 
-    /** Логотип станции по названию (для станций, добавленных до появления логотипов). */
-    suspend fun findLogo(st: Station): String? {
+    /** Та же станция в каталоге (по id или названию) — оттуда логотип и сайт. */
+    suspend fun lookup(st: Station): List<FoundStation> {
         val key = Station.normalizeName(st.name)
         val found = search(st.name, ukraineOnly = false)
-        return (found.firstOrNull { it.uuid == st.id && it.favicon.isNotBlank() }
-            ?: found.firstOrNull { Station.normalizeName(it.name) == key && it.favicon.isNotBlank() })?.favicon
+        return found.filter { it.uuid == st.id || Station.normalizeName(it.name) == key }
+            .sortedByDescending { if (it.uuid == st.id) 1 else 0 }
     }
 
     fun sameStation(key: String, found: List<FoundStation>, exclude: Set<String>): List<Stream> =

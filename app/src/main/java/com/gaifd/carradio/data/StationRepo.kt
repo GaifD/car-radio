@@ -89,7 +89,11 @@ object StationRepo {
         return (0 until a.length()).map { Station.fromJson(a.getJSONObject(it)) }
     }
 
-    fun setLogo(id: String, url: String) = save(_stations.value.map { if (it.id == id) it.copy(logo = url) else it })
+    fun setLogo(id: String, url: String, badge: String = "") =
+        save(_stations.value.map { if (it.id == id) it.copy(logo = url, logoBadge = badge) else it })
+
+    fun setHomepage(id: String, url: String) =
+        save(_stations.value.map { if (it.id == id && it.homepage != url) it.copy(homepage = url) else it })
 
     fun rename(id: String, name: String) {
         if (name.isBlank()) return

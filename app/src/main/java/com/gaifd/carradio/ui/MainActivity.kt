@@ -410,25 +410,14 @@ class MainActivity : ComponentActivity() {
     private fun fetchLogos() {
         if (logoStatus?.startsWith("Ищу") == true) return
         lifecycleScope.launch {
-            val list = StationRepo.stations.value.filter { !Logos.has(it.id) }
-            if (list.isEmpty()) {
-                logoStatus = "У всех станций уже есть логотипы"
-                return@launch
+            val (found, total) = Logos.autoFind(StationRepo.stations.value, force = true) { i, n ->
+                logoStatus = "Ищу… $i из $n"
             }
-            var found = 0
-            list.forEachIndexed { i, st ->
-                logoStatus = "Ищу… ${i + 1} из ${list.size}"
-                try {
-                    val url = st.logo.ifBlank { RadioBrowser.findLogo(st) ?: "" }
-                    if (url.isNotBlank() && Logos.download(st.id, url)) {
-                        if (st.logo != url) StationRepo.setLogo(st.id, url)
-                        found++
-                    }
-                } catch (_: Exception) {
-                }
+            logoStatus = when {
+                total == 0 -> "У всех станций уже есть логотипы"
+                found == total -> "Нашлись все: $found"
+                else -> "Нашлось $found из $total. Остальные — цветными плитками; свою картинку можно поставить, удерживая плитку."
             }
-            logoStatus = "Нашлось логотипов: $found из ${list.size}" +
-                if (found < list.size) ". Остальным можно поставить свою картинку: удерживай плитку." else ""
         }
     }
 
@@ -447,7 +436,8 @@ class MainActivity : ComponentActivity() {
         val updateState by Updater.state.collectAsState()
         val updateVersion = (updateState as? UpdateState.Available)?.info?.version
 
-        LaunchedEffect(stations) { Logos.ensure(stations) }
+        // Новым станциям логотипы ищутся сами: каталог → родительская станция → сайт.
+        LaunchedEffect(stations.map { it.id }) { Logos.autoFind(stations) }
         LaunchedEffect(settings.accent, settings.accentSource) {
             kotlinx.coroutines.delay(400) // пока тянут ползунок — не дёргаем виджет на каждый шаг
             com.gaifd.carradio.playback.RadioWidget.refresh(this@MainActivity)

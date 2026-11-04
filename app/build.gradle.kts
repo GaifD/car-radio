@@ -12,8 +12,8 @@ android {
         applicationId = "com.gaifd.carradio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.5"
+        versionCode = 10
+        versionName = "1.2.6"
     }
 
     // Постоянный ключ: каждая новая сборка ставится поверх старой, станции и настройки сохраняются.

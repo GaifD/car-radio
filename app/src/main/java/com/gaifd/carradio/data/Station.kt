@@ -14,6 +14,8 @@ data class Station(
     val bitrate: Int = 0,
     val alts: List<Stream> = emptyList(),
     val logo: String = "",          // ссылка на логотип из каталога (картинка хранится локально)
+    val homepage: String = "",      // сайт станции — оттуда можно взять иконку
+    val logoBadge: String = "",     // подпись на логотипе подканала: «Disco», «Best»
 ) {
     /** Основная ссылка первой, затем запасные. */
     val streams: List<Stream> get() = listOf(Stream(url, bitrate)) + alts
@@ -38,6 +40,8 @@ data class Station(
         .put("genre", genre)
         .put("bitrate", bitrate)
         .put("logo", logo)
+        .put("homepage", homepage)
+        .put("logoBadge", logoBadge)
         .put("alts", JSONArray().also { a ->
             alts.forEach { a.put(JSONObject().put("url", it.url).put("bitrate", it.bitrate)) }
         })
@@ -61,8 +65,14 @@ data class Station(
                 bitrate = o.optInt("bitrate", 0),
                 alts = alts,
                 logo = o.optString("logo", ""),
+                homepage = o.optString("homepage", ""),
+                logoBadge = o.optString("logoBadge", ""),
             )
         }
+
+        /** Слова названия без «FM/радио» и скобок — для подписи подканала. */
+        fun words(s: String): List<String> =
+            s.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotBlank() && it.lowercase() !in STOP_WORDS }
 
         /** Для сравнения названий: регистр, «FM/радио», украинские буквы и латиница — не важны. */
         fun normalizeName(s: String): String {

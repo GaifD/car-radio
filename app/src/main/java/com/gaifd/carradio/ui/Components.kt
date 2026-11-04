@@ -70,19 +70,27 @@ fun SectionTitle(text: String, hint: String? = null) {
     }
 }
 
+/** Плитка без логотипа: у каждой станции свой цвет (из названия) и короткое имя крупно. */
 @Composable
-fun Monogram(text: String, size: Int, active: Boolean, big: Boolean = false) {
+fun Monogram(text: String, size: Int, active: Boolean, big: Boolean = false, seed: String = text) {
+    val light = C.bg == LightPalette.bg
+    val hue = ((seed.lowercase().hashCode() and 0x7fffffff) % 360).toFloat()
+    val bg = Color(Accent.fromHsl(hue, if (light) 0.55f else 0.42f, if (light) 0.88f else 0.2f))
+    val fg = Color(Accent.fromHsl(hue, if (light) 0.6f else 0.75f, if (light) 0.32f else 0.74f))
+    val shape = RoundedCornerShape((size / 3.5f).dp)
     Box(
         Modifier
             .size(size.dp)
-            .clip(RoundedCornerShape((size / 3.5f).dp))
-            .background(if (big) C.accentBg else C.bg),
+            .clip(shape)
+            .background(bg)
+            .then(if (active && !big) Modifier.border(2.dp, C.accent, shape) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         val fs = when {
-            big && text.length <= 3 -> 24.sp
-            big -> 18.sp
-            text.length <= 3 -> 14.sp
+            big && text.length <= 3 -> 26.sp
+            big -> 20.sp
+            size <= 34 -> if (text.length <= 3) 11.sp else 9.sp
+            text.length <= 3 -> 15.sp
             else -> 12.sp
         }
         Text(
@@ -90,31 +98,60 @@ fun Monogram(text: String, size: Int, active: Boolean, big: Boolean = false) {
             fontFamily = Chakra,
             fontWeight = FontWeight.Bold,
             fontSize = fs,
-            color = if (active || big) C.accent else C.soft,
+            color = fg,
             maxLines = 1,
         )
     }
 }
 
-/** Логотип станции, если есть, иначе буквенная плашка. */
+/** Логотип станции, если есть, иначе цветная плитка. У подканала — подпись снизу («Disco»). */
 @Composable
 fun StationLogo(st: com.gaifd.carradio.data.Station, size: Int, active: Boolean, big: Boolean = false) {
     val ver by com.gaifd.carradio.data.Logos.version.collectAsState()
     val bmp = remember(st.id, ver) { com.gaifd.carradio.data.Logos.bitmap(st.id)?.asImageBitmap() }
     if (bmp == null) {
-        Monogram(st.short, size, active, big)
+        Monogram(st.short, size, active, big, seed = st.name)
         return
     }
+    val shape = RoundedCornerShape((size / 3.5f).dp)
+    val badge = st.logoBadge.takeIf { it.isNotBlank() && size >= 40 }
     Box(
         Modifier
             .size(size.dp)
-            .clip(RoundedCornerShape((size / 3.5f).dp))
+            .clip(shape)
             .background(C.logoBg)
-            .then(if (active && !big) Modifier.border(2.dp, C.accent, RoundedCornerShape((size / 3.5f).dp)) else Modifier)
-            .padding((size / 10).dp),
-        contentAlignment = Alignment.Center,
+            .then(if (active && !big) Modifier.border(2.dp, C.accent, shape) else Modifier),
     ) {
-        Image(bmp, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        Image(
+            bmp, contentDescription = null, contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    start = (size / 10).dp, end = (size / 10).dp, top = (size / 10).dp,
+                    bottom = if (badge != null) (size / 4).dp else (size / 10).dp,
+                ),
+        )
+        if (badge != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xE60A0E11))
+                    .padding(vertical = (size / 40).coerceAtLeast(1).dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    badge,
+                    fontSize = (size / 6.5f).coerceIn(8f, 18f).sp,
+                    lineHeight = (size / 6.5f).coerceIn(8f, 18f).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 3.dp),
+                )
+            }
+        }
     }
 }
 

@@ -568,7 +568,7 @@ private fun StationMenu(st: Station, open: Boolean, isFirst: Boolean, isLast: Bo
         )
         if (hasLogo) DropdownMenuItem(
             text = { Text("Убрать логотип", color = C.text) },
-            onClick = { onDismiss(); Logos.remove(st.id); StationRepo.setLogo(st.id, "") },
+            onClick = { onDismiss(); Logos.remove(st.id); Logos.dontSearch(st.id); StationRepo.setLogo(st.id, "") },
         )
         if (!isFirst) DropdownMenuItem(
             text = { Text("Сдвинуть раньше", color = C.text) },

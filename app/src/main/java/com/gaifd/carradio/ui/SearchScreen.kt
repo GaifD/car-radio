@@ -180,7 +180,7 @@ private fun ResultRow(f: FoundStation, added: Boolean, onAdd: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Monogram(st.short, 42, active = false)
+        Monogram(st.short, 42, active = false, seed = st.name)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             OneLine(f.name, 14, weight = FontWeight.SemiBold)
