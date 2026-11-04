@@ -47,16 +47,28 @@
         android:scaleType="center"
         android:src="@drawable/w_prev" />
 
-    <ImageButton
-        android:id="@+id/w_play"
+    <FrameLayout
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginStart="2dp"
-        android:layout_marginEnd="2dp"
-        android:background="@drawable/w_play_bg"
-        android:contentDescription="Играть или пауза"
-        android:scaleType="center"
-        android:src="@drawable/w_play" />
+        android:layout_marginEnd="2dp">
+
+        <ImageView
+            android:id="@+id/w_play_circle"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:src="@drawable/w_play_bg" />
+
+        <ImageButton
+            android:id="@+id/w_play"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:contentDescription="Играть или пауза"
+            android:scaleType="center"
+            android:src="@drawable/w_play" />
+    </FrameLayout>
 
     <ImageButton
         android:id="@+id/w_next"

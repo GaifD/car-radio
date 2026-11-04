@@ -38,6 +38,12 @@ import com.gaifd.carradio.data.UpdateInfo
 import com.gaifd.carradio.data.UpdateState
 import com.gaifd.carradio.data.Updater
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -91,6 +97,8 @@ fun SettingsScreen(
             if (s.theme == Settings.THEME_BY_TIME) {
                 Text("светлая с 7:00 до 19:00, остальное время тёмная", fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 6.dp))
             }
+            Spacer(Modifier.height(14.dp))
+            AccentPicker(s)
             Spacer(Modifier.height(14.dp))
             Text("Список станций", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
@@ -422,6 +430,108 @@ private fun Segmented(options: List<Pair<Int, String>>, selected: Int, small: Bo
                 )
             }
         }
+    }
+}
+
+/** Выбор цвета приложения: готовые, свой (оттенок + яркость) и цвет обоев. */
+@Composable
+private fun AccentPicker(s: Settings) {
+    val wallpaper = s.accentSource == Settings.ACCENT_WALLPAPER
+    val isPreset = !wallpaper && Accent.PRESETS.contains(s.accent)
+    var customOpen by remember { mutableStateOf(!wallpaper && !isPreset) }
+    val custom = customOpen && !wallpaper
+
+    Text("Цвет", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(10.dp))
+    Accent.PRESETS.chunked(4).forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            row.forEach { c ->
+                Swatch(
+                    fill = Brush.linearGradient(listOf(Color(c), Color(c))),
+                    selected = !wallpaper && !custom && s.accent == c,
+                    desc = "Цвет",
+                ) {
+                    customOpen = false
+                    Prefs.update { it.copy(accent = c, accentSource = Settings.ACCENT_FIXED) }
+                }
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Chip("Свой цвет", custom) {
+            customOpen = true
+            Prefs.update { it.copy(accentSource = Settings.ACCENT_FIXED) }
+        }
+        if (Accent.wallpaperAvailable()) {
+            Chip("Цвет обоев", wallpaper) {
+                customOpen = false
+                Prefs.update { it.copy(accentSource = Settings.ACCENT_WALLPAPER) }
+            }
+        }
+    }
+
+    if (custom) {
+        val hsl = remember(s.accent) { Accent.hsl(s.accent) }
+        Spacer(Modifier.height(12.dp))
+        Text("Оттенок", fontSize = 12.sp, color = C.muted)
+        GradientSlider(
+            value = hsl[0] / 360f,
+            brush = Brush.horizontalGradient((0..6).map { Color(Accent.fromHsl(it * 60f, 0.85f, 0.6f)) }),
+        ) { v -> Prefs.update { it.copy(accent = Accent.fromHsl(v * 360f, maxOf(hsl[1], 0.6f), hsl[2])) } }
+        Spacer(Modifier.height(8.dp))
+        Text("Яркость", fontSize = 12.sp, color = C.muted)
+        GradientSlider(
+            value = ((hsl[2] - 0.35f) / 0.45f).coerceIn(0f, 1f),
+            brush = Brush.horizontalGradient(listOf(0.35f, 0.575f, 0.8f).map { Color(Accent.fromHsl(hsl[0], maxOf(hsl[1], 0.6f), it)) }),
+        ) { v -> Prefs.update { it.copy(accent = Accent.fromHsl(hsl[0], maxOf(hsl[1], 0.6f), 0.35f + v * 0.45f)) } }
+    }
+    if (wallpaper) {
+        Text(
+            "Цвет берётся из обоев и меняется вместе с ними.",
+            fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun Swatch(fill: Brush, selected: Boolean, desc: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(52.dp)
+            .clip(CircleShape)
+            .border(2.dp, if (selected) C.text else Color.Transparent, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(5.dp)
+            .clip(CircleShape)
+            .background(fill)
+            .semantics { contentDescription = desc },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) Icon(Ic.check, null, tint = Color(0xFF0A0E11), modifier = Modifier.size(20.dp))
+    }
+}
+
+/** Ползунок с цветной полосой вместо обычной дорожки. */
+@Composable
+private fun GradientSlider(value: Float, brush: Brush, onChange: (Float) -> Unit) {
+    Box(Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp)
+                .height(12.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(brush)
+        )
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            colors = SliderDefaults.colors(
+                thumbColor = C.text,
+                activeTrackColor = Color.Transparent,
+                inactiveTrackColor = Color.Transparent,
+            ),
+        )
     }
 }
 

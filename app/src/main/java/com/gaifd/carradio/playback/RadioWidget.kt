@@ -11,6 +11,7 @@ import android.widget.RemoteViews
 import com.gaifd.carradio.R
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.StationRepo
+import com.gaifd.carradio.ui.Accent
 import com.gaifd.carradio.ui.MainActivity
 
 /** Виджет на рабочий стол: станция, трек, назад / играть / вперёд. */
@@ -27,6 +28,22 @@ class RadioWidget : AppWidgetProvider() {
     }
 
     companion object {
+        /** Перерисовать виджет (например, сменился цвет приложения). */
+        fun refresh(ctx: Context) {
+            val mgr = AppWidgetManager.getInstance(ctx) ?: return
+            val ids = try {
+                mgr.getAppWidgetIds(ComponentName(ctx, RadioWidget::class.java))
+            } catch (_: Exception) {
+                return
+            }
+            if (ids.isEmpty()) return
+            ctx.sendBroadcast(
+                Intent(ctx, RadioWidget::class.java)
+                    .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+            )
+        }
+
         fun update(ctx: Context, station: String, track: String?, playing: Boolean) {
             val mgr = AppWidgetManager.getInstance(ctx) ?: return
             val ids = try {
@@ -48,6 +65,11 @@ class RadioWidget : AppWidgetProvider() {
                 v.setTextViewText(R.id.w_track, track)
             }
             v.setImageViewResource(R.id.w_play, if (playing) R.drawable.w_pause else R.drawable.w_play)
+            // Кружок «играть» — в цвет приложения, значок на нём — чёрный или белый, что читается.
+            Prefs.init(ctx)
+            val acc = Accent.forDark(Accent.base(ctx, Prefs.settings.value))
+            v.setInt(R.id.w_play_circle, "setColorFilter", acc.accent)
+            v.setInt(R.id.w_play, "setColorFilter", acc.onAccent)
 
             // Пока играет — сервис уже запущен, достаточно обычной команды.
             // На паузе кнопки сами запускают плеер (так Android разрешает старт с виджета).

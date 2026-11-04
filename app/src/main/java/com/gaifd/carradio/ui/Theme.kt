@@ -114,8 +114,13 @@ val Manrope = FontFamily(
 )
 
 @Composable
-fun CarRadioTheme(light: Boolean, content: @Composable () -> Unit) {
-    val p = if (light) LightPalette else DarkPalette
+fun CarRadioTheme(light: Boolean, accent: Int, content: @Composable () -> Unit) {
+    val a = if (light) Accent.forLight(accent) else Accent.forDark(accent)
+    val p = (if (light) LightPalette else DarkPalette).copy(
+        accent = Color(a.accent),
+        accentBg = Color(a.accentBg),
+        onAccent = Color(a.onAccent),
+    )
     val scheme = if (light) {
         lightColorScheme(
             primary = p.accent, onPrimary = p.onAccent, background = p.bg, onBackground = p.text,

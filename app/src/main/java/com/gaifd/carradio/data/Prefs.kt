@@ -29,6 +29,8 @@ data class Settings(
     val scheduleOn: Boolean = false,
     val schedule: Map<String, String> = emptyMap(),    // утро/день/вечер/ночь → id станции
     val theme: Int = THEME_DARK,
+    val accent: Int = DEFAULT_ACCENT,          // свой цвет приложения (ARGB)
+    val accentSource: Int = ACCENT_FIXED,      // свой цвет или цвет обоев
 ) {
     /** Режим «Трасса» — запас до 3 минут. */
     val targetBufferMs: Long get() = if (highway) HIGHWAY_BUFFER_MS else bufferSec * 1000L
@@ -45,6 +47,10 @@ data class Settings(
         const val THEME_DARK = 1
         const val THEME_LIGHT = 2
         const val THEME_BY_TIME = 3
+
+        const val DEFAULT_ACCENT = 0xFF2DE1D3.toInt()
+        const val ACCENT_FIXED = 0
+        const val ACCENT_WALLPAPER = 1
 
         /** Периоды для «станции по расписанию». */
         val PERIODS = listOf("morning" to "Утро · 5–11", "day" to "День · 11–17", "evening" to "Вечер · 17–23", "night" to "Ночь · 23–5")
@@ -98,6 +104,8 @@ object Prefs {
                 if (k.isNotBlank() && v.isNotBlank()) k to v else null
             }.toMap(),
             theme = sp.getInt("theme", d.theme),
+            accent = sp.getInt("accent", d.accent),
+            accentSource = sp.getInt("accentSource", d.accentSource),
         )
     }
 
@@ -130,6 +138,8 @@ object Prefs {
             .putBoolean("scheduleOn", s.scheduleOn)
             .putString("schedule", s.schedule.entries.joinToString(";") { "${it.key}=${it.value}" })
             .putInt("theme", s.theme)
+            .putInt("accent", s.accent)
+            .putInt("accentSource", s.accentSource)
             .apply()
     }
 

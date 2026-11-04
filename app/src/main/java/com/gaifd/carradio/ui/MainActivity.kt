@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.dark(0xFF0D1215.toInt()),
                 )
             }
-            CarRadioTheme(light) { AppRoot() }
+            CarRadioTheme(light, Accent.base(this, settings)) { AppRoot() }
         }
     }
 
@@ -448,6 +448,10 @@ class MainActivity : ComponentActivity() {
         val updateVersion = (updateState as? UpdateState.Available)?.info?.version
 
         LaunchedEffect(stations) { Logos.ensure(stations) }
+        LaunchedEffect(settings.accent, settings.accentSource) {
+            kotlinx.coroutines.delay(400) // пока тянут ползунок — не дёргаем виджет на каждый шаг
+            com.gaifd.carradio.playback.RadioWidget.refresh(this@MainActivity)
+        }
 
         if (showDrive) {
             BackHandler { showDrive = false }

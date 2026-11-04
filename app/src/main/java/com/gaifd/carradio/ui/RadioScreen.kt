@@ -298,14 +298,9 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
                     .background(color)
             )
         }
-        // «Запастись»: есть смысл, только если до полного запаса далеко.
-        val room = ui.targetMs - ui.bufferMs
+        // Идёт прогрев или «Запастись» из режима «за рулём» — можно не ждать.
         if (stocking) {
             PillButton("Играть сейчас", filled = true) { RadioBus.control?.playNow() }
-        } else if (ui.playing && !ui.loading && !ui.offline && room > 8_000) {
-            PillButton("Запастись на ${(ui.targetMs / 1000).toInt()} с — звук прервётся, пока копится", filled = false) {
-                RadioBus.control?.stockUp()
-            }
         }
     }
 }
