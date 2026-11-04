@@ -273,17 +273,19 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
     val goal = (ui.targetMs / 1000).toInt()
     val right = when {
         !ui.playing -> ""
-        ui.offline -> "нет связи · хватит на $sec с"
+        ui.offline -> "нет связи"
         ui.loading -> "подключаюсь"
-        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
+        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится" else "не полный"
         else -> "полный"
     }
     val color = if (ui.offline) C.amber else C.accent
     val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) {
+            // «Буфер 7 из 30 с»: сколько в запасе и сколько копим. Справа — только состояние.
             Text("Буфер ", fontSize = 12.sp, color = C.muted)
-            Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
+            Text("$sec", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = if (ui.offline) C.amber else C.text)
+            Text(" из $goal с", fontSize = 12.sp, color = C.muted)
             Spacer(Modifier.weight(1f))
             Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
         }
