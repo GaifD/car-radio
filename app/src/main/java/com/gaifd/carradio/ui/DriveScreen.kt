@@ -32,7 +32,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gaifd.carradio.data.Station
-import com.gaifd.carradio.playback.RadioBus
 import com.gaifd.carradio.playback.RadioUi
 
 /** Режим «за рулём»: экран не гаснет, всё крупно, свайп по экрану переключает станции. */
@@ -51,10 +50,10 @@ fun DriveScreen(
         onDispose { view.keepScreenOn = false }
     }
     val status = when {
-        ui.stockingMs > 0 -> "копит запас · ${ui.bufferMs / 1000} с"
         ui.offline -> "нет связи · хватит на ${ui.bufferMs / 1000} с"
         ui.playing && ui.loading -> "подключаюсь…"
-        ui.playing -> "в эфире · буфер ${ui.bufferMs / 1000} с"
+        ui.playing && ui.bufferOn -> "в эфире · буфер ${ui.bufferMs / 1000} с"
+        ui.playing -> "в эфире"
         else -> "пауза"
     }
     Column(
@@ -111,41 +110,9 @@ fun DriveScreen(
             }
             BigButton(96, false, "Следующая станция", onNext) { Icon(Ic.next, null, tint = C.text, modifier = Modifier.size(40.dp)) }
         }
-        // «Запастись» — только в «Трассе»: в городе обычная пауза и так копит буфер.
-        val room = ui.targetMs - ui.bufferMs
-        if (ui.stockingMs > 0) {
-            Spacer(Modifier.height(16.dp))
-            DriveWideButton("Играть сейчас · накоплено ${ui.bufferMs / 1000} из ${ui.stockingMs / 1000} с", filled = true) {
-                RadioBus.control?.playNow()
-            }
-        } else if (ui.highway && ui.playing && !ui.loading && !ui.offline && room > 8_000) {
-            Spacer(Modifier.height(16.dp))
-            DriveWideButton("Запастись на ${ui.targetMs / 1000} с перед дорогой", filled = false) {
-                RadioBus.control?.stockUp()
-            }
-        }
         Spacer(Modifier.height(16.dp))
         Text("свайп по экрану — соседняя станция", fontSize = 13.sp, color = C.faint)
         Spacer(Modifier.height(8.dp))
-    }
-}
-
-@Composable
-private fun DriveWideButton(text: String, filled: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = 60.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .then(if (filled) Modifier.background(C.accent) else Modifier.border(2.dp, C.accent, RoundedCornerShape(18.dp)))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text, fontSize = 17.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
-            color = if (filled) C.onAccent else C.accent,
-        )
     }
 }
 

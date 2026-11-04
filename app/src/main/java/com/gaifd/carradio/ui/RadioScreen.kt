@@ -139,7 +139,6 @@ private fun Header(settings: Settings, ui: RadioUi, output: AudioOut, onDrive: (
         else -> C.faint
     }
     val status = when {
-        ui.stockingMs > 0 -> "копит запас"
         ui.offline -> "нет связи · играет из буфера"
         ui.interrupted -> "пауза на время звонка"
         ui.playing && ui.loading -> "подключаюсь…"
@@ -202,7 +201,6 @@ private fun NowPlaying(
     val label: String
     val labelColor: Color
     when {
-        ui.stockingMs > 0 -> { label = "КОПИТ ЗАПАС"; labelColor = C.accent }
         ui.offline -> { label = "НЕТ СВЯЗИ"; labelColor = C.amber }
         ui.playing && ui.loading -> { label = "ЗАГРУЗКА"; labelColor = C.soft }
         ui.playing -> { label = "В ЭФИРЕ"; labelColor = C.accent }
@@ -262,45 +260,64 @@ private fun NowPlaying(
 @Composable
 private fun BufferBar(ui: RadioUi, settings: Settings) {
     val sec = (ui.bufferMs / 1000).toInt()
-    val stocking = ui.stockingMs > 0
-    val goalMs = if (stocking) ui.stockingMs else ui.targetMs
-    val goal = (goalMs / 1000).toInt()
-    val right = when {
-        stocking -> "из $goal с"
-        !ui.playing -> ""
-        ui.offline -> "хватит ещё на $sec с"
-        ui.loading -> "подключаюсь"
-        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
-        else -> "поток стабилен"
-    }
-    val color = if (ui.offline) C.amber else C.accent
-    val frac = if (goalMs > 0) (ui.bufferMs.toFloat() / goalMs).coerceIn(0f, 1f) else 0f
+    val lag = (ui.lagMs / 1000).toInt()
+    val canGoLive = ui.playing && !ui.loading && !ui.offline && ui.lagMs >= 5_000
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(if (stocking) "Копится " else "Буфер ", fontSize = 12.sp, color = C.muted)
-            Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
-            Spacer(Modifier.weight(1f))
-            Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
+    // Буфер включён — полоска запаса. Выключен — только «в прямом эфире» / отставание после паузы.
+    if (ui.bufferOn || ui.offline) {
+        val goal = (ui.targetMs / 1000).toInt()
+        val right = when {
+            !ui.playing -> ""
+            ui.offline -> "хватит ещё на $sec с"
+            ui.loading -> "подключаюсь"
+            ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится до $goal с" else "запас до $goal с"
+            else -> "поток стабилен"
         }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(C.line)
-        ) {
+        val color = if (ui.offline) C.amber else C.accent
+        val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth()) {
+                Text("Буфер ", fontSize = 12.sp, color = C.muted)
+                Text("$sec с", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.text)
+                Spacer(Modifier.weight(1f))
+                Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
+            }
             Box(
                 Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(frac)
+                    .fillMaxWidth()
+                    .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(color)
-            )
+                    .background(C.line)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(frac)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(color)
+                )
+            }
         }
-        // Идёт прогрев или «Запастись» из режима «за рулём» — можно не ждать.
-        if (stocking) {
-            PillButton("Играть сейчас", filled = true) { RadioBus.control?.playNow() }
+    }
+    if (ui.playing && !ui.loading && !ui.offline) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (lag >= 2) "отстаёт от эфира на $lag с" else "прямой эфир",
+                fontSize = 12.sp, color = C.muted, modifier = Modifier.weight(1f),
+            )
+            if (canGoLive) {
+                Box(
+                    Modifier
+                        .heightIn(min = 36.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .border(1.dp, C.accent, RoundedCornerShape(99.dp))
+                        .clickable { RadioBus.control?.goLive() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("В прямой эфир", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent)
+                }
+            }
         }
     }
 }
@@ -308,7 +325,7 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
 /** Формат и битрейт потока + сколько реально приходит из сети. */
 @Composable
 private fun StreamInfo(ui: RadioUi) {
-    if (!ui.playing || (ui.loading && ui.stockingMs == 0L)) return
+    if (!ui.playing || ui.loading) return
     val left = listOfNotNull(
         ui.codec,
         if (ui.bitrateKbps > 0) "${ui.bitrateKbps} kbps" else null,

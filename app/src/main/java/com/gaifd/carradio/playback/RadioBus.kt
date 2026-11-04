@@ -19,14 +19,15 @@ data class RadioUi(
     val codec: String? = null,
     val bitrateKbps: Int = 0,           // битрейт потока
     val rxKbps: Int = 0,                // сколько реально приходит из сети
-    val stockingMs: Long = 0,           // > 0 — идёт «Запастись» до этого уровня
+    val bufferOn: Boolean = false,      // буфер копится (включён, «Авто» на мобильном или «Трасса»)
+    val lagMs: Long = 0,                // насколько отстаём от живого эфира
     val highway: Boolean = false,
 )
 
 /** Команды экрана плееру, которых нет у обычного плеера. */
 interface RadioControl {
-    fun stockUp()
-    fun playNow()
+    /** Догнать прямой эфир: свежий поток с плавным переходом, без тишины. */
+    fun goLive()
 }
 
 object RadioBus {

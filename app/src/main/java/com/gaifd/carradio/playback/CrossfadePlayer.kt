@@ -75,6 +75,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         const val SWITCH_DEBOUNCE_MS = 450L     // быстрое листание кнопками: грузим только конечную станцию
         const val INCOMING_TIMEOUT_MS = 20_000L
         const val STALE_PAUSE_MS = 20_000L      // без «умной паузы»: после такой паузы — заново к эфиру
+        const val LIVE_PAUSE_MS = 3_000L        // буфер выключен: после паузы сразу к живому эфиру
         const val SLOW_SPEED = 0.97f            // копим буфер: на 3% медленнее, высота звука не меняется
         const val OFFLINE_AFTER_MS = 4_000L
         const val FAILOVER_AFTER_MS = 15_000L   // поток завис, а интернет есть — пробуем запасную ссылку
@@ -113,6 +114,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     /** Один внутренний плеер и всё, что к нему относится. */
     private inner class Slot(val stationId: String, val streamIdx: Int, val stream: Stream, val targetMs: Long, val noFade: Boolean) {
+        /** Когда начал звучать: отставание от эфира = прошло времени − сколько проиграно. */
+        var liveSince = 0L
         val counter = AtomicLong(0)
         val leveler = Leveler(Prefs.gain(stationId)).also { it.enabled = Prefs.settings.value.leveler }
         val exo: ExoPlayer = buildExo(this)
@@ -134,7 +137,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var incoming: Slot? = null
     private var fadingOut: Slot? = null
     private var fadeRunnable: Runnable? = null
-    private var rampRunnable: Runnable? = null
     private var pendingSwitch: Runnable? = null
     private val incomingTimeout = Runnable { incomingFailed("станция не отвечает") }
 
@@ -148,7 +150,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private val tried = mutableSetOf<Int>()            // какие ссылки текущей станции уже не ответили
     private val preferredIdx = HashMap<String, Int>()  // какая ссылка станции сработала последней
 
-    private var stockTargetMs = 0L
     private var offline = false
     private var offlineSince = 0L
     private var lastFailoverAt = 0L
@@ -156,7 +157,23 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var lastBuffered = 0L
     private var lastGrowAt = 0L
     private var error: String? = null
-    private var lastTarget = Prefs.settings.value.targetBufferMs
+    private var metered = try {
+        cm.isActiveNetworkMetered
+    } catch (_: Exception) {
+        true
+    }
+    private var lastTarget = target()
+    private val netCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: android.net.Network, caps: NetworkCapabilities) {
+            val m = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+            handler.post {
+                if (m != metered) {
+                    metered = m
+                    onTargetMaybeChanged()
+                }
+            }
+        }
+    }
     private var lastLeveler = Prefs.settings.value.leveler
     private var lastEq = Prefs.settings.value.eqPreset to Prefs.settings.value.eqCustom
 
@@ -188,6 +205,10 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     init {
         RadioBus.control = this
         handler.post(tick)
+        try {
+            cm.registerDefaultNetworkCallback(netCallback)
+        } catch (_: Exception) {
+        }
         scope.launch {
             StationRepo.stations.collect { list -> onStationsChanged(list) }
         }
@@ -202,14 +223,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                     lastEq = eqNow
                     listOfNotNull(active, incoming, fadingOut).forEach { applyEqualizer(it.eq) }
                 }
-                if (s.targetBufferMs != lastTarget) {
-                    lastTarget = s.targetBufferMs
-                    // Новый размер буфера («Трасса» и т.п.) — переподключаем текущую станцию сразу.
-                    val a = active
-                    if (userPlay && a != null && a.stationId == currentId && stockTargetMs == 0L) {
-                        beginLoad(streamIndex = a.streamIdx, reload = true)
-                    }
-                }
+                onTargetMaybeChanged()
                 invalidate()
             }
         }
@@ -296,6 +310,10 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     override fun handleRelease(): ListenableFuture<*> {
         if (RadioBus.control === this) RadioBus.control = null
+        try {
+            cm.unregisterNetworkCallback(netCallback)
+        } catch (_: Exception) {
+        }
         scope.cancel()
         handler.removeCallbacksAndMessages(null)
         cancelIncoming()
@@ -309,26 +327,25 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     // ---------- Команды экрана ----------
 
-    /** «Запастись»: звук плавно затихает, буфер копится до полного, потом радио продолжает с того же места. */
-    override fun stockUp() = stockUp(Prefs.settings.value.targetBufferMs)
-
-    fun stockUp(requestMs: Long) {
-        if (stations.isEmpty()) return
-        if (!userPlay) startPlayback()
-        val target = Prefs.settings.value.targetBufferMs
-        stockTargetMs = min(requestMs, target - 2_000).coerceAtLeast(3_000)
-        val a = active
-        if (a != null && a.stationId == currentId && a.exo.isPlaying) {
-            finishFade()
-            ramp(a, a.exo.volume, 0f, 600) { if (stockTargetMs > 0) a.exo.pause() }
-        }
-        invalidate()
+    override fun goLive() {
+        val a = active ?: return
+        if (!userPlay || a.stationId != currentId || incoming != null) return
+        // Живой поток вперёд не перемотать — подключаемся заново вторым плеером и плавно переходим.
+        beginLoad(streamIndex = a.streamIdx, reload = true, fadeIn = true)
     }
 
-    override fun playNow() {
-        if (stockTargetMs == 0L) return
-        stockTargetMs = 0
-        resumeAfterStock()
+    private fun target(): Long = Prefs.settings.value.targetBufferMs(metered)
+
+    /** Сменился размер буфера (вкл/выкл, «Трасса», сеть в «Авто») — переподключаем текущую станцию с плавным переходом. */
+    private fun onTargetMaybeChanged() {
+        val t = target()
+        if (t == lastTarget) return
+        lastTarget = t
+        val a = active
+        if (userPlay && a != null && a.stationId == currentId && incoming == null) {
+            beginLoad(streamIndex = a.streamIdx, reload = true, fadeIn = true)
+        }
+        invalidate()
     }
 
     fun selectById(id: String) {
@@ -354,7 +371,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun pausePlayback() {
         userPlay = false
-        stockTargetMs = 0
         pendingSwitch?.let { handler.removeCallbacks(it) }
         pendingSwitch = null
         cancelIncoming()
@@ -372,7 +388,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         skipCount = 0
         tried.clear()
         error = null
-        stockTargetMs = 0
         Prefs.update { it.copy(lastStationId = st.id) }
         pendingSwitch?.let { handler.removeCallbacks(it) }
         pendingSwitch = null
@@ -391,7 +406,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
      * Запускает загрузку текущей станции во второй плеер.
      * streamIndex — какую ссылку взять (запасная, облегчённая); reload — переподключить ту же.
      */
-    private fun beginLoad(streamIndex: Int? = null, reload: Boolean = false) {
+    private fun beginLoad(streamIndex: Int? = null, reload: Boolean = false, fadeIn: Boolean = false) {
         pendingSwitch = null
         if (!userPlay) return
         val st = stations.firstOrNull { it.id == currentId } ?: return
@@ -400,10 +415,14 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         if (!reload && streamIndex == null && a != null && a.stationId == st.id && incoming == null) {
             val pausedFor = SystemClock.uptimeMillis() - pausedAt
             // Умная пауза: пока пауза не дольше запаса — продолжаем с того же места, буфер не теряем.
-            val limit = if (s.smartPause) max(a.targetMs + 5_000, 30_000) else STALE_PAUSE_MS
+            val limit = when {
+                !s.bufferOn(metered) -> LIVE_PAUSE_MS
+                s.smartPause -> max(a.targetMs + 5_000, 30_000)
+                else -> STALE_PAUSE_MS
+            }
             val stale = !a.exo.isPlaying && pausedAt > 0 && pausedFor > limit
             if (a.exo.playbackState != Player.STATE_IDLE && !stale) {
-                if (!transientLoss && stockTargetMs == 0L) a.exo.play()
+                if (!transientLoss) a.exo.play()
                 a.exo.volume = level()
                 invalidate()
                 return
@@ -413,12 +432,12 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val inc = incoming
         if (!reload && inc != null && inc.stationId == st.id && inc.streamIdx == idx) return
         cancelIncoming()
-        val slot = Slot(st.id, idx, st.streams[idx], s.targetBufferMs, noFade = reload)
+        val slot = Slot(st.id, idx, st.streams[idx], target(), noFade = reload && !fadeIn)
         incoming = slot
         slot.exo.volume = 0f
         slot.exo.setMediaItem(mediaItem(st, slot.stream.url))
         slot.exo.prepare()
-        slot.exo.playWhenReady = !transientLoss && stockTargetMs == 0L
+        slot.exo.playWhenReady = !transientLoss
         handler.postDelayed(incomingTimeout, INCOMING_TIMEOUT_MS)
         invalidate()
     }
@@ -442,15 +461,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         lastBuffered = 0
         lastGrowAt = SystemClock.uptimeMillis()
         inc.title?.let { t -> stationName(inc.stationId)?.let { History.add(it, t) } }
-
-        if (stockTargetMs > 0) {
-            // «Запастись» / прогрев: копим молча.
-            old?.let { releaseSlot(it) }
-            inc.exo.volume = 0f
-            inc.exo.pause()
-            invalidate()
-            return
-        }
+        inc.liveSince = SystemClock.elapsedRealtime()
 
         val dur = if (inc.noFade) 0L else Prefs.settings.value.crossfadeMs.toLong()
         when {
@@ -512,22 +523,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         a?.let { releaseSlot(it) }
         active = null
         userPlay = false
-        stockTargetMs = 0
         abandonFocus()
-        invalidate()
-    }
-
-    private fun resumeAfterStock() {
-        val a = active
-        if (a == null || a.stationId != currentId) {
-            beginLoad()
-            return
-        }
-        rampRunnable?.let { handler.removeCallbacks(it) }
-        rampRunnable = null
-        a.exo.volume = 0f
-        if (!transientLoss) a.exo.play()
-        fade(a, null, 900)
         invalidate()
     }
 
@@ -556,31 +552,12 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         handler.post(r)
     }
 
-    private fun ramp(slot: Slot, from: Float, to: Float, dur: Long, then: () -> Unit) {
-        rampRunnable?.let { handler.removeCallbacks(it) }
-        val start = SystemClock.uptimeMillis()
-        val r = object : Runnable {
-            override fun run() {
-                val t = ((SystemClock.uptimeMillis() - start).toFloat() / dur).coerceIn(0f, 1f)
-                slot.exo.volume = from + (to - from) * t
-                if (t < 1f) handler.postDelayed(this, 30) else {
-                    rampRunnable = null
-                    then()
-                }
-            }
-        }
-        rampRunnable = r
-        handler.post(r)
-    }
-
     private fun finishFade() {
         fadeRunnable?.let { handler.removeCallbacks(it) }
         fadeRunnable = null
-        rampRunnable?.let { handler.removeCallbacks(it) }
-        rampRunnable = null
         fadingOut?.let { releaseSlot(it) }
         fadingOut = null
-        if (stockTargetMs == 0L) active?.exo?.volume = level()
+        active?.exo?.volume = level()
     }
 
     private fun level() = if (ducked) 0.25f else 1f
@@ -755,7 +732,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                     if (slot === active && userPlay) {
                         exo.seekToDefaultPosition()
                         exo.prepare()
-                        if (!transientLoss && stockTargetMs == 0L) exo.play()
+                        if (!transientLoss) exo.play()
                     }
                 }, 2000)
                 invalidate()
@@ -806,16 +783,16 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         when (change) {
             AudioManager.AUDIOFOCUS_GAIN -> {
                 ducked = false
-                if (transientLoss && userPlay && stockTargetMs == 0L) {
+                if (transientLoss && userPlay) {
                     active?.exo?.play()
                     incoming?.exo?.play()
                 }
                 transientLoss = false
-                if (fadeRunnable == null && stockTargetMs == 0L) active?.exo?.volume = level()
+                if (fadeRunnable == null) active?.exo?.volume = level()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 ducked = true // навигатор говорит — приглушаем, не останавливаем
-                if (fadeRunnable == null && stockTargetMs == 0L) active?.exo?.volume = level()
+                if (fadeRunnable == null) active?.exo?.volume = level()
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 transientLoss = true // звонок — пауза, после него продолжим
@@ -861,16 +838,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                 lastGrowAt = now
             }
 
-            // «Запастись»: держим на паузе, пока не накопится.
-            if (stockTargetMs > 0) {
-                if (exo.isPlaying && rampRunnable == null) exo.pause()
-                if (bufMs >= stockTargetMs) {
-                    stockTargetMs = 0
-                    resumeAfterStock()
-                }
-            }
-
-            val playing = userPlay && !transientLoss && stockTargetMs == 0L
+            val playing = userPlay && !transientLoss
             if (playing && exo.playbackState != Player.STATE_IDLE &&
                 bufMs < a.targetMs - 1000 && now - lastGrowAt > OFFLINE_AFTER_MS
             ) {
@@ -883,7 +851,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             maybeFailover(a, now)
             maybeLowerQuality(a, now, bufMs, playing)
 
-            val slow = playing && Prefs.settings.value.growBuffer && !offline &&
+            // Замедление ради запаса — только когда буфер включён.
+            val slow = playing && Prefs.settings.value.growBuffer && Prefs.settings.value.bufferOn(metered) && !offline &&
                 exo.playbackState == Player.STATE_READY && bufMs < a.targetMs - 1500
             val speed = if (slow) SLOW_SPEED else 1f
             if (exo.playbackParameters.speed != speed) exo.playbackParameters = PlaybackParameters(speed)
@@ -992,7 +961,6 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             releaseSlot(a)
             active = null
             userPlay = false
-            stockTargetMs = 0
             abandonFocus()
         }
         if (currentId == null || list.none { it.id == currentId }) currentId = list.firstOrNull()?.id
@@ -1001,6 +969,13 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     // ---------- Вспомогательное ----------
 
+    /** Отставание от эфира с момента подключения: паузы, замедление, подгрузки. */
+    private fun lag(a: Slot): Long {
+        if (a.liveSince == 0L) return 0
+        val elapsed = SystemClock.elapsedRealtime() - a.liveSince
+        return (elapsed - a.exo.currentPosition).coerceAtLeast(0)
+    }
+
     private fun currentIndex() = stations.indexOfFirst { it.id == currentId }
 
     private fun stationName(id: String) = stations.firstOrNull { it.id == id }?.name
@@ -1008,7 +983,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private fun currentTrack(): String? = active?.takeIf { it.stationId == currentId }?.title
 
     private fun isLoadingNow(): Boolean = userPlay && (
-        stockTargetMs > 0 || pendingSwitch != null || incoming != null || active == null ||
+        pendingSwitch != null || incoming != null || active == null ||
             active?.stationId != currentId || active?.exo?.playbackState == Player.STATE_BUFFERING
         )
 
@@ -1035,7 +1010,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             trackArtist = track?.artist,
             rawTrack = raw,
             bufferMs = bufMs,
-            targetMs = a?.targetMs ?: s.targetBufferMs,
+            targetMs = a?.targetMs ?: target(),
             offline = offline && userPlay,
             interrupted = userPlay && transientLoss,
             error = error,
@@ -1043,8 +1018,9 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             codec = if (a != null) codec else null,
             bitrateKbps = if (a != null) bitrateKbps else 0,
             rxKbps = if (a != null) rxKbps.toInt() else 0,
-            stockingMs = stockTargetMs,
             highway = s.highway,
+            bufferOn = s.bufferOn(metered),
+            lagMs = a?.let { lag(it) } ?: 0L,
         )
         // Виджет обновляем только когда что-то видимое поменялось.
         val name = stations.firstOrNull { it.id == currentId }?.name ?: "Авторадио"

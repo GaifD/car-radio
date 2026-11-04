@@ -140,20 +140,6 @@ fun SettingsScreen(
             ToggleRow("Играть при подключении", "сразу последняя станция", s.autoPlay) { v ->
                 Prefs.update { it.copy(autoPlay = v) }
             }
-            if (s.autoPlay) {
-                Column(Modifier.padding(vertical = 10.dp)) {
-                    Text("Прогрев: начинать с запасом", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "пока машина греется, радио молча копит буфер и потом начинает играть",
-                        fontSize = 12.sp, color = C.muted, lineHeight = 16.sp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Segmented(listOf(0 to "сразу", 30 to "30 с", 60 to "60 с"), s.warmupSec) { v ->
-                        Prefs.update { it.copy(warmupSec = v) }
-                    }
-                }
-                Divider()
-            }
             ToggleRow("Станция по расписанию", "при автозапуске утром одна станция, вечером другая", s.scheduleOn) { v ->
                 Prefs.update { it.copy(scheduleOn = v) }
             }
@@ -209,37 +195,56 @@ fun SettingsScreen(
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
             CardTitle("Буфер")
-            ToggleRow(
-                "Режим «Трасса»",
-                "запас до 3 минут — для поездок за город. Включается и кнопкой на главном экране",
-                s.highway,
-            ) { v -> Prefs.update { it.copy(highway = v) } }
-            Column(Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    if (s.highway) "Запас в городе (сейчас «Трасса» — 180 с)" else "Запас буфера",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(8.dp))
-                Segmented(listOf(10 to "10 с", 30 to "30 с", 60 to "60 с"), s.bufferSec) { v ->
-                    Prefs.update { it.copy(bufferSec = v) }
+            Text(
+                "Запас звука на случай, когда пропадает связь. Дома на стабильном интернете не нужен — " +
+                    "без него звук ближе к живому эфиру.",
+                fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
+            )
+            Spacer(Modifier.height(10.dp))
+            Segmented(
+                listOf(Settings.BUFFER_OFF to "Выкл", Settings.BUFFER_ON to "Вкл", Settings.BUFFER_AUTO to "Авто"),
+                s.bufferMode,
+            ) { v -> Prefs.update { it.copy(bufferMode = v) } }
+            Text(
+                when (s.bufferMode) {
+                    Settings.BUFFER_ON -> "копится всегда"
+                    Settings.BUFFER_AUTO -> "копится на мобильном интернете и точке доступа с телефона, на домашнем Wi-Fi — нет"
+                    else -> "только несколько секунд, без которых поток не играет; после паузы — сразу прямой эфир"
+                },
+                fontSize = 12.sp, color = C.muted, lineHeight = 16.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp),
+            )
+            if (s.bufferMode != Settings.BUFFER_OFF) {
+                Divider()
+                Column(Modifier.padding(vertical = 10.dp)) {
+                    Text("Размер запаса", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Segmented(listOf(10 to "10 с", 30 to "30 с", 60 to "60 с"), s.bufferSec) { v ->
+                        Prefs.update { it.copy(bufferSec = v) }
+                    }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Больше запас — дольше играет без связи. Новое значение применяется сразу, станция переподключится.",
-                    fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
-                )
             }
             Divider()
             ToggleRow(
-                "Умная пауза",
-                "короткая пауза продолжает с того же места и не сбрасывает запас",
-                s.smartPause,
-            ) { v -> Prefs.update { it.copy(smartPause = v) } }
-            ToggleRow(
-                "Копить буфер на ходу",
-                "играет на 3% медленнее, пока запас не наберётся; высота звука не меняется",
-                s.growBuffer, divider = false,
-            ) { v -> Prefs.update { it.copy(growBuffer = v) } }
+                "Режим «Трасса»",
+                "запас до 3 минут для поездок за город; включает буфер, даже если он выключен. Есть кнопка на главном экране",
+                s.highway,
+            ) { v -> Prefs.update { it.copy(highway = v) } }
+            if (s.bufferMode != Settings.BUFFER_OFF || s.highway) {
+                ToggleRow(
+                    "Умная пауза",
+                    "короткая пауза продолжает с того же места и не сбрасывает запас",
+                    s.smartPause,
+                ) { v -> Prefs.update { it.copy(smartPause = v) } }
+                ToggleRow(
+                    "Копить буфер на ходу",
+                    "играет на 3% медленнее, пока запас не наберётся; высота звука не меняется",
+                    s.growBuffer, divider = false,
+                ) { v -> Prefs.update { it.copy(growBuffer = v) } }
+            }
+            Text(
+                "Отстаёшь от эфира — на главном экране кнопка «В прямой эфир»: свежий поток с плавным переходом.",
+                fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         // ---- Если поток пропал ----

@@ -105,8 +105,6 @@ class PlaybackService : MediaSessionService() {
                 }
                 intent.getStringExtra(EXTRA_STATION)?.let { player.selectById(it) }
                 player.play()
-                // Прогрев: пока машина греется, радио молча копит запас и потом начинает играть.
-                if (fromCar && s.warmupSec > 0) player.stockUp(s.warmupSec * 1000L)
             }
             ACTION_PAUSE -> player.pause()
             ACTION_TOGGLE -> when {
