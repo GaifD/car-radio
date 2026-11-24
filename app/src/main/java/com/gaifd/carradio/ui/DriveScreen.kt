@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,11 +53,11 @@ fun DriveScreen(
         onDispose { view.keepScreenOn = false }
     }
     val status = when {
-        ui.offline -> "нет связи · хватит на ${ui.bufferMs / 1000} с"
-        ui.playing && ui.loading -> "подключаюсь…"
-        ui.playing && ui.bufferOn -> "в эфире · буфер ${ui.bufferMs / 1000} с"
-        ui.playing -> "в эфире"
-        else -> "пауза"
+        ui.offline -> L.s(R.string.drive_001, ui.bufferMs / 1000)
+        ui.playing && ui.loading -> L.s(R.string.drive_002)
+        ui.playing && ui.bufferOn -> L.s(R.string.drive_003, ui.bufferMs / 1000)
+        ui.playing -> L.s(R.string.drive_004)
+        else -> L.s(R.string.drive_005)
     }
     Column(
         Modifier
@@ -73,7 +76,7 @@ fun DriveScreen(
                     .clickable(onClick = onClose)
                     .padding(horizontal = 18.dp, vertical = 12.dp),
                 contentAlignment = Alignment.Center,
-            ) { Text("Выйти", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.soft) }
+            ) { Text(L.s(R.string.drive_006), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.soft) }
             Spacer(Modifier.weight(1f))
             Text(status, fontSize = 15.sp, color = if (ui.offline) C.amber else C.muted)
         }
@@ -95,7 +98,7 @@ fun DriveScreen(
                 Text(ui.trackArtist, fontSize = 18.sp, color = C.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         } else {
-            Text("Нет станций", fontSize = 24.sp, color = C.soft)
+            Text(L.s(R.string.drive_007), fontSize = 24.sp, color = C.soft)
         }
         Spacer(Modifier.weight(1f))
 
@@ -104,14 +107,14 @@ fun DriveScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BigButton(96, false, "Предыдущая станция", onPrev) { Icon(Ic.prev, null, tint = C.text, modifier = Modifier.size(40.dp)) }
-            BigButton(128, true, if (ui.playing) "Пауза" else "Играть", onToggle) {
+            BigButton(96, false, L.s(R.string.drive_008), onPrev) { Icon(Ic.prev, null, tint = C.text, modifier = Modifier.size(40.dp)) }
+            BigButton(128, true, if (ui.playing) L.s(R.string.drive_009) else L.s(R.string.drive_010), onToggle) {
                 Icon(if (ui.playing) Ic.pause else Ic.play, null, tint = C.onAccent, modifier = Modifier.size(52.dp))
             }
-            BigButton(96, false, "Следующая станция", onNext) { Icon(Ic.next, null, tint = C.text, modifier = Modifier.size(40.dp)) }
+            BigButton(96, false, L.s(R.string.drive_011), onNext) { Icon(Ic.next, null, tint = C.text, modifier = Modifier.size(40.dp)) }
         }
         Spacer(Modifier.height(16.dp))
-        Text("свайп по экрану — соседняя станция", fontSize = 13.sp, color = C.faint)
+        Text(L.s(R.string.drive_012), fontSize = 13.sp, color = C.faint)
         Spacer(Modifier.height(8.dp))
     }
 }

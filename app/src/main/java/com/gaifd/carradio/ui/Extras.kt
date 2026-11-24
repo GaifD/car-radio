@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,8 +83,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Если основная ссылка не отвечает или зависла, приложение само переключится на запасную. " +
-                        "Ссылку с меньшим битрейтом возьмёт при слабой связи.",
+                    L.s(R.string.songs_001),
                     fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
                 )
                 st.streams.forEachIndexed { i, s ->
@@ -94,7 +96,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                if (i == 0) "Основная" else "Запасная $i",
+                                if (i == 0) L.s(R.string.songs_002) else L.s(R.string.songs_003, i),
                                 fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 color = if (i == 0) C.accent else C.soft,
                                 modifier = Modifier.weight(1f),
@@ -105,11 +107,11 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                         if (i > 0) {
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
                                 Text(
-                                    "Сделать основной", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.accent,
+                                    L.s(R.string.songs_004), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.accent,
                                     modifier = Modifier.clickable { StationRepo.makePrimary(st.id, s.url) }.padding(vertical = 6.dp),
                                 )
                                 Text(
-                                    "Удалить", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.amber,
+                                    L.s(R.string.songs_005), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.amber,
                                     modifier = Modifier.clickable { StationRepo.removeAlt(st.id, s.url) }.padding(vertical = 6.dp),
                                 )
                             }
@@ -118,7 +120,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                 }
 
                 Text(
-                    if (busy) "Ищу…" else "Найти запасные в каталоге",
+                    if (busy) L.s(R.string.songs_006) else L.s(R.string.songs_007),
                     fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (busy) C.muted else C.accent,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -129,11 +131,11 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                                 try {
                                     val found = RadioBrowser.findAlternatives(st)
                                     found.forEach { StationRepo.addAlt(st.id, it) }
-                                    msg = if (found.isEmpty()) "В каталоге других ссылок нет" else "Добавлено: ${found.size}"
+                                    msg = if (found.isEmpty()) L.s(R.string.songs_008) else L.s(R.string.songs_009, found.size)
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
-                                    msg = "Каталог не отвечает"
+                                    msg = L.s(R.string.songs_010)
                                 } finally {
                                     busy = false
                                 }
@@ -150,7 +152,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                         .border(1.dp, C.border, RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
-                    if (url.isEmpty()) Text("Своя ссылка https://…", fontSize = 14.sp, color = C.faint)
+                    if (url.isEmpty()) Text(L.s(R.string.songs_011), fontSize = 14.sp, color = C.faint)
                     BasicTextField(
                         value = url,
                         onValueChange = { url = it },
@@ -163,7 +165,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                 }
                 if (url.isNotBlank()) {
                     Text(
-                        if (busy) "Проверяю…" else "Проверить и добавить запасной",
+                        if (busy) L.s(R.string.songs_012) else L.s(R.string.songs_013),
                         fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (busy) C.muted else C.accent,
                         modifier = Modifier
                             .clickable(enabled = !busy) {
@@ -174,11 +176,11 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
                                         val r = StreamProbe.probe(url)
                                         StationRepo.addAlt(st.id, Stream(r.url, 0))
                                         url = ""
-                                        msg = "Добавлено"
+                                        msg = L.s(R.string.songs_014)
                                     } catch (e: CancellationException) {
                                         throw e
                                     } catch (e: Exception) {
-                                        msg = e.message ?: "Не удалось открыть поток"
+                                        msg = e.message ?: L.s(R.string.songs_015)
                                     } finally {
                                         busy = false
                                     }
@@ -191,7 +193,7 @@ fun StreamsDialog(stationId: String, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Готово", color = C.accent, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text(L.s(R.string.songs_016), color = C.accent, fontWeight = FontWeight.Bold) }
         },
     )
 }
@@ -202,29 +204,29 @@ fun SongsScreen(segment: Int, onSegment: (Int) -> Unit, history: List<HistoryEnt
     val favs by Favorites.items.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        ScreenTitle("Песни")
+        ScreenTitle(L.s(R.string.songs_017))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-            Chip("Понравилось", segment == 0) { onSegment(0) }
-            Chip("История", segment == 1) { onSegment(1) }
-            Chip("Статистика", segment == 2) { onSegment(2) }
+            Chip(L.s(R.string.songs_018), segment == 0) { onSegment(0) }
+            Chip(L.s(R.string.songs_019), segment == 1) { onSegment(1) }
+            Chip(L.s(R.string.songs_020), segment == 2) { onSegment(2) }
         }
         when (segment) {
             0 -> {
                 if (favs.isEmpty()) {
-                    Hint("Нажми сердечко у песни на главном экране или в истории — она появится здесь.")
+                    Hint(L.s(R.string.songs_021))
                 } else {
-                    Hint("Нажми на песню, чтобы найти её в YouTube Music, Spotify или Google.")
+                    Hint(L.s(R.string.songs_022))
                     SongList(favs.map { HistoryEntry(it.time, it.station, it.track) }, onSearch)
                 }
             }
             1 -> {
                 if (history.isEmpty()) {
-                    Hint("Пока пусто. Здесь будут песни, которые играли, — если станция присылает названия.")
+                    Hint(L.s(R.string.songs_023))
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Hint("Нажми на песню, чтобы найти её.", Modifier.weight(1f))
+                        Hint(L.s(R.string.songs_024), Modifier.weight(1f))
                         Text(
-                            "Очистить", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.muted,
+                            L.s(R.string.songs_025), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.muted,
                             modifier = Modifier.clickable { confirmClear = true }.padding(8.dp),
                         )
                     }
@@ -239,12 +241,12 @@ fun SongsScreen(segment: Int, onSegment: (Int) -> Unit, history: List<HistoryEnt
             onDismissRequest = { confirmClear = false },
             containerColor = C.card,
             titleContentColor = C.text,
-            title = { Text("Очистить историю?", fontWeight = FontWeight.Bold) },
+            title = { Text(L.s(R.string.songs_026), fontWeight = FontWeight.Bold) },
             confirmButton = {
-                TextButton(onClick = { History.clear(); confirmClear = false }) { Text("Очистить", color = C.amber) }
+                TextButton(onClick = { History.clear(); confirmClear = false }) { Text(L.s(R.string.songs_025), color = C.amber) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Отмена", color = C.muted) }
+                TextButton(onClick = { confirmClear = false }) { Text(L.s(R.string.songs_027), color = C.muted) }
             },
         )
     }
@@ -283,16 +285,16 @@ private fun StatsView() {
     val all = remember(ver) { Stats.allTime() }
     Column(Modifier.verticalScroll(rememberScrollState())) {
         Card(padding = 16) {
-            Text("Этот месяц", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(L.s(R.string.songs_028), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(hours(month.sumOf { it.ms }), fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 30.sp, color = C.accent)
             Spacer(Modifier.height(8.dp))
-            if (month.isEmpty()) Text("Ещё ничего не слушал", fontSize = 13.sp, color = C.soft)
+            if (month.isEmpty()) Text(L.s(R.string.songs_029), fontSize = 13.sp, color = C.soft)
             val top = month.firstOrNull()?.ms ?: 1L
             month.take(10).forEach { st -> StatBar(st.name, st.ms, top) }
         }
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            Text("За всё время", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(L.s(R.string.songs_030), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(hours(all.sumOf { it.ms }), fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 24.sp)
             Spacer(Modifier.height(4.dp))
             all.take(5).forEach { st ->
@@ -303,7 +305,7 @@ private fun StatsView() {
                 }
             }
             Text(
-                "сбросить статистику", fontSize = 12.sp, color = C.muted,
+                L.s(R.string.songs_031), fontSize = 12.sp, color = C.muted,
                 modifier = Modifier.clickable { Stats.reset() }.padding(top = 10.dp, bottom = 2.dp),
             )
         }
@@ -334,7 +336,7 @@ private fun StatBar(name: String, ms: Long, top: Long) {
 
 private fun hours(ms: Long): String {
     val min = ms / 60_000
-    return if (min < 60) "$min мин" else "${min / 60} ч ${min % 60} мин"
+    return if (min < 60) L.s(R.string.songs_032, min) else L.s(R.string.songs_033, min / 60, min % 60)
 }
 
 /** Где искать песню. */
@@ -361,7 +363,7 @@ fun SearchChooser(query: String, onPick: (String) -> Unit, onDismiss: () -> Unit
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть", color = C.muted) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(L.s(R.string.songs_034), color = C.muted) } },
     )
 }
 
@@ -371,9 +373,9 @@ private fun dayLabel(t: Long): String {
     val today = dayOf(System.currentTimeMillis())
     val yesterday = dayOf(System.currentTimeMillis() - 86_400_000L)
     return when (dayOf(t)) {
-        today -> "Сегодня"
-        yesterday -> "Вчера"
-        else -> java.text.SimpleDateFormat("d MMMM", java.util.Locale("ru")).format(java.util.Date(t))
+        today -> L.s(R.string.songs_035)
+        yesterday -> L.s(R.string.songs_036)
+        else -> java.text.SimpleDateFormat("d MMMM", com.gaifd.carradio.L.locale()).format(java.util.Date(t))
     }
 }
 

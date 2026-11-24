@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,33 +86,35 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        ScreenTitle("Настройки")
+        ScreenTitle(L.s(R.string.main_019))
 
         // ---- Вид ----
         Card(padding = 16) {
-            CardTitle("Вид")
-            Text("Тема", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            CardTitle(L.s(R.string.set_001))
+            LanguagePicker()
+            Spacer(Modifier.height(14.dp))
+            Text(L.s(R.string.set_002), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Segmented(
-                listOf(Settings.THEME_DARK to "Тёмная", Settings.THEME_LIGHT to "Светлая", Settings.THEME_SYSTEM to "Как в системе", Settings.THEME_BY_TIME to "По времени"),
+                listOf(Settings.THEME_DARK to L.s(R.string.set_003), Settings.THEME_LIGHT to L.s(R.string.set_004), Settings.THEME_SYSTEM to L.s(R.string.set_005), Settings.THEME_BY_TIME to L.s(R.string.set_006)),
                 s.theme, small = true,
             ) { v -> Prefs.update { it.copy(theme = v) } }
             if (s.theme == Settings.THEME_BY_TIME) {
-                Text("светлая с 7:00 до 19:00, остальное время тёмная", fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 6.dp))
+                Text(L.s(R.string.set_007), fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 6.dp))
             }
             Spacer(Modifier.height(14.dp))
             AccentPicker(s)
             Spacer(Modifier.height(14.dp))
-            Text("Список станций", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(L.s(R.string.set_008), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Segmented(
-                listOf(Settings.VIEW_GRID to "Плитки", Settings.VIEW_LIST to "Список", Settings.VIEW_BIG to "Крупно", Settings.VIEW_COMPACT to "Компакт"),
+                listOf(Settings.VIEW_GRID to L.s(R.string.set_009), Settings.VIEW_LIST to L.s(R.string.set_010), Settings.VIEW_BIG to L.s(R.string.set_011), Settings.VIEW_COMPACT to L.s(R.string.set_012)),
                 s.stationView, small = true,
             ) { v -> Prefs.update { it.copy(stationView = v) } }
             Spacer(Modifier.height(6.dp))
             ActionRow(
-                title = "Подтянуть логотипы",
-                hint = logoStatus ?: "найти в каталоге логотипы для станций, у которых их нет",
+                title = L.s(R.string.set_013),
+                hint = logoStatus ?: L.s(R.string.set_014),
                 icon = Ic.image,
                 divider = false,
                 onClick = onFetchLogos,
@@ -119,44 +124,44 @@ fun SettingsScreen(
 
         // ---- Автозапуск ----
         Card(padding = 16) {
-            CardTitle("Автозапуск в машине")
+            CardTitle(L.s(R.string.set_015))
             ActionRow(
-                title = "Машина",
-                hint = s.carName?.let { "$it — на неё реагировать" } ?: "Выбери Bluetooth-устройство машины",
+                title = L.s(R.string.set_016),
+                hint = s.carName?.let { L.s(R.string.set_017, it) } ?: L.s(R.string.set_018),
                 icon = Ic.chevronDown,
                 iconTint = if (s.carMac == null) C.accent else C.muted,
                 onClick = onPickCar,
             )
             if (s.carMac != null) {
                 ActionRow(
-                    title = "Привязка к телефону",
-                    hint = if (sys.carLinked) "Есть — Android будит радио при подключении машины"
-                    else "Нет — нажми, чтобы Android разрешил запуск из фона",
+                    title = L.s(R.string.set_019),
+                    hint = if (sys.carLinked) L.s(R.string.set_020)
+                    else L.s(R.string.set_021),
                     icon = if (sys.carLinked) Ic.check else Ic.link,
                     iconTint = if (sys.carLinked) C.accent else C.amber,
                     onClick = onLinkCar,
                 )
             }
-            ToggleRow("Играть при подключении", "сразу последняя станция", s.autoPlay) { v ->
+            ToggleRow(L.s(R.string.set_022), L.s(R.string.set_023), s.autoPlay) { v ->
                 Prefs.update { it.copy(autoPlay = v) }
             }
-            ToggleRow("Станция по расписанию", "при автозапуске утром одна станция, вечером другая", s.scheduleOn) { v ->
+            ToggleRow(L.s(R.string.set_024), L.s(R.string.set_025), s.scheduleOn) { v ->
                 Prefs.update { it.copy(scheduleOn = v) }
             }
             if (s.scheduleOn) {
                 Column(Modifier.padding(vertical = 6.dp)) {
                     Settings.PERIODS.forEach { (key, label) ->
-                        ScheduleRow(label, s.schedule[key], stations) { id ->
+                        ScheduleRow(L.s(label), s.schedule[key], stations) { id ->
                             Prefs.update { it.copy(schedule = if (id == null) it.schedule - key else it.schedule + (key to id)) }
                         }
                     }
                 }
                 Divider()
             }
-            ToggleRow("Пауза при отключении", "заглушил машину — радио стоп", s.pauseOnDisconnect) { v ->
+            ToggleRow(L.s(R.string.set_026), L.s(R.string.set_027), s.pauseOnDisconnect) { v ->
                 Prefs.update { it.copy(pauseOnDisconnect = v) }
             }
-            ToggleRow("Громкость при старте", "не громче 60%, чтобы не оглушало", s.limitStartVolume, divider = false) { v ->
+            ToggleRow(L.s(R.string.set_028), L.s(R.string.set_029), s.limitStartVolume, divider = false) { v ->
                 Prefs.update { it.copy(limitStartVolume = v) }
             }
         }
@@ -165,9 +170,9 @@ fun SettingsScreen(
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("Плавный переход", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(L.s(R.string.set_030), fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(
-                    if (s.crossfadeMs == 0) "выключен" else "%.1f с".format(s.crossfadeMs / 1000f),
+                    if (s.crossfadeMs == 0) L.s(R.string.set_031) else L.s(R.string.set_032).format(s.crossfadeMs / 1000f),
                     fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                     color = if (s.crossfadeMs == 0) C.muted else C.accent,
                 )
@@ -186,7 +191,7 @@ fun SettingsScreen(
                 ),
             )
             Text(
-                "Пока новая станция загружается, старая играет — тишины между ними не будет.",
+                L.s(R.string.set_033),
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
             )
         }
@@ -194,36 +199,35 @@ fun SettingsScreen(
         // ---- Буфер ----
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            CardTitle("Буфер")
+            CardTitle(L.s(R.string.set_034))
             Text(
-                "Запас звука на случай, когда пропадает связь. Дома на стабильном интернете не нужен — " +
-                    "без него звук ближе к живому эфиру.",
+                L.s(R.string.set_035),
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
             )
             Spacer(Modifier.height(10.dp))
             // Один переключатель на всё: «Трасса» — четвёртый вариант, чтобы было видно, что реально работает.
             val HIGHWAY = 99
             Segmented(
-                listOf(Settings.BUFFER_OFF to "Выкл", Settings.BUFFER_ON to "Вкл", Settings.BUFFER_AUTO to "Авто", HIGHWAY to "Трасса"),
+                listOf(Settings.BUFFER_OFF to L.s(R.string.set_036), Settings.BUFFER_ON to L.s(R.string.set_037), Settings.BUFFER_AUTO to L.s(R.string.set_038), HIGHWAY to L.s(R.string.radio_014)),
                 if (s.highway) HIGHWAY else s.bufferMode,
             ) { v ->
                 Prefs.update { if (v == HIGHWAY) it.copy(highway = true) else it.copy(bufferMode = v, highway = false) }
             }
             Text(
                 when {
-                    s.highway -> "запас до 3 минут для поездок за город. Выключить — кнопкой «Трасса» на главной или выбрать другой режим здесь"
-                    s.bufferMode == Settings.BUFFER_ON -> "копится всегда"
-                    s.bufferMode == Settings.BUFFER_AUTO -> "копится на мобильном интернете и точке доступа с телефона, на домашнем Wi-Fi — нет"
-                    else -> "только несколько секунд, без которых поток не играет; после паузы — сразу прямой эфир"
+                    s.highway -> L.s(R.string.set_039)
+                    s.bufferMode == Settings.BUFFER_ON -> L.s(R.string.set_040)
+                    s.bufferMode == Settings.BUFFER_AUTO -> L.s(R.string.set_041)
+                    else -> L.s(R.string.set_042)
                 },
                 fontSize = 12.sp, color = C.muted, lineHeight = 16.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp),
             )
             if (s.bufferMode != Settings.BUFFER_OFF && !s.highway) {
                 Divider()
                 Column(Modifier.padding(vertical = 10.dp)) {
-                    Text("Размер запаса", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(L.s(R.string.set_043), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Segmented(listOf(10 to "10 с", 30 to "30 с", 60 to "60 с"), s.bufferSec) { v ->
+                    Segmented(listOf(10 to L.s(R.string.set_044), 30 to L.s(R.string.set_045), 60 to L.s(R.string.set_046)), s.bufferSec) { v ->
                         Prefs.update { it.copy(bufferSec = v) }
                     }
                 }
@@ -231,14 +235,13 @@ fun SettingsScreen(
             if (s.bufferMode != Settings.BUFFER_OFF || s.highway) {
                 Divider()
                 ToggleRow(
-                    "Копить буфер на ходу",
-                    "играет на 3% медленнее, пока запас не наберётся; высота звука не меняется",
+                    L.s(R.string.set_047),
+                    L.s(R.string.set_048),
                     s.growBuffer, divider = false,
                 ) { v -> Prefs.update { it.copy(growBuffer = v) } }
             }
             Text(
-                "Буфер — это и есть отставание от эфира. Кнопка «В прямой эфир» на главной сбрасывает его: свежий поток с плавным переходом.\n" +
-                    "Пауза короче буфера — продолжит с того же места, ничего не пропустишь. Дольше или буфер выключен — сразу живой эфир.",
+                L.s(R.string.set_049),
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -246,20 +249,19 @@ fun SettingsScreen(
         // ---- Если поток пропал ----
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            CardTitle("Если поток пропал")
+            CardTitle(L.s(R.string.set_050))
             ToggleRow(
-                "Запасные ссылки",
-                "ссылка не отвечает или зависла — переключиться на другую ссылку той же станции",
+                L.s(R.string.set_051),
+                L.s(R.string.set_052),
                 s.fallback,
             ) { v -> Prefs.update { it.copy(fallback = v) } }
             ToggleRow(
-                "Понижать качество",
-                "слабая связь и запас тает — взять ссылку с меньшим битрейтом",
+                L.s(R.string.set_053),
+                L.s(R.string.set_054),
                 s.lowerQuality,
             ) { v -> Prefs.update { it.copy(lowerQuality = v) } }
             Text(
-                "Работает у станций, где есть несколько ссылок: удерживай плитку → «Ссылки потока». " +
-                    "Переподключение при обрывах работает всегда.",
+                L.s(R.string.set_055),
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -267,23 +269,23 @@ fun SettingsScreen(
         // ---- Звук ----
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            CardTitle("Звук")
+            CardTitle(L.s(R.string.set_056))
             ToggleRow(
-                "Выравнивание громкости",
-                "станции звучат одинаково громко; подстраивается плавно, за несколько секунд",
+                L.s(R.string.set_057),
+                L.s(R.string.set_058),
                 s.leveler,
             ) { v -> Prefs.update { it.copy(leveler = v) } }
             Column(Modifier.padding(vertical = 10.dp)) {
-                Text("Эквалайзер", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(L.s(R.string.set_059), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                val presets = listOf("off" to "Выкл", "bass" to "Бас", "voice" to "Голос", "car" to "Машина", "soft" to "Мягче", "custom" to "Свой")
+                val presets = listOf("off" to L.s(R.string.set_036), "bass" to L.s(R.string.set_060), "voice" to L.s(R.string.set_061), "car" to L.s(R.string.set_016), "soft" to L.s(R.string.set_062), "custom" to L.s(R.string.set_063))
                 presets.chunked(3).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
                         row.forEach { (id, label) -> Chip(label, s.eqPreset == id) { Prefs.update { it.copy(eqPreset = id) } } }
                     }
                 }
                 if (s.eqPreset == "custom") {
-                    listOf("60 Гц", "230 Гц", "910 Гц", "3.6 кГц", "14 кГц").forEachIndexed { i, label ->
+                    listOf(L.s(R.string.set_064), L.s(R.string.set_065), L.s(R.string.set_066), L.s(R.string.set_067), L.s(R.string.set_068)).forEachIndexed { i, label ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(label, fontSize = 12.sp, color = C.muted, modifier = Modifier.width(64.dp))
                             Slider(
@@ -304,14 +306,14 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "«Машина» — чуть больше баса и верхов, «Голос» — разборчивее новости и ток-шоу.",
+                    L.s(R.string.set_069),
                     fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
                 )
             }
             Divider()
             ToggleRow(
-                "Трек на экране магнитолы",
-                "песня, исполнитель и станция вместо «Bluetooth Audio»",
+                L.s(R.string.set_070),
+                L.s(R.string.set_071),
                 s.showTrack, divider = false,
             ) { v -> Prefs.update { it.copy(showTrack = v) } }
         }
@@ -327,16 +329,16 @@ fun SettingsScreen(
         // ---- Станции ----
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            CardTitle("Станции")
+            CardTitle(L.s(R.string.set_072))
             ActionRow(
-                title = "Сохранить в файл",
-                hint = "все станции со ссылками — на случай смены телефона",
+                title = L.s(R.string.set_073),
+                hint = L.s(R.string.set_074),
                 icon = Ic.chevronRight,
                 onClick = onExport,
             )
             ActionRow(
-                title = "Загрузить из файла",
-                hint = "добавит станции, которых ещё нет; свои не тронет",
+                title = L.s(R.string.set_075),
+                hint = L.s(R.string.set_076),
                 icon = Ic.chevronRight,
                 divider = false,
                 onClick = onImport,
@@ -346,35 +348,34 @@ fun SettingsScreen(
         // ---- Фон ----
         Spacer(Modifier.height(10.dp))
         Card(padding = 16) {
-            CardTitle("Работа в фоне")
+            CardTitle(L.s(R.string.set_077))
             ActionRow(
-                title = "Батарея",
-                hint = if (sys.batteryOk) "Без ограничений — радио не выключится в фоне"
-                else "Телефон ограничивает приложение. Нажми, чтобы снять.",
+                title = L.s(R.string.set_078),
+                hint = if (sys.batteryOk) L.s(R.string.set_079)
+                else L.s(R.string.set_080),
                 icon = if (sys.batteryOk) Ic.check else Ic.alert,
                 iconTint = if (sys.batteryOk) C.accent else C.amber,
                 onClick = onFixBattery,
             )
             ActionRow(
-                title = "Уведомления",
-                hint = if (sys.notificationsOk) "Разрешены — кнопки плеера на экране блокировки"
-                else "Выключены — без них Android может остановить радио",
+                title = L.s(R.string.set_081),
+                hint = if (sys.notificationsOk) L.s(R.string.set_082)
+                else L.s(R.string.set_083),
                 icon = if (sys.notificationsOk) Ic.check else Ic.alert,
                 iconTint = if (sys.notificationsOk) C.accent else C.amber,
                 onClick = onFixNotifications,
             )
             if (s.carMac != null && !sys.bluetoothOk) {
                 ActionRow(
-                    title = "Доступ к Bluetooth",
-                    hint = "Нужен, чтобы узнать, что подключилась именно машина",
+                    title = L.s(R.string.set_084),
+                    hint = L.s(R.string.set_085),
                     icon = Ic.alert, iconTint = C.amber,
                     onClick = onPickCar,
                 )
             }
             ActionRow(
-                title = "На Samsung дополнительно",
-                hint = "Свойства приложения → Батарея → «Не ограничено». И в Настройки → Батарея → " +
-                    "Ограничения фонового использования → добавь «Авторадио» в приложения, которые никогда не спят.",
+                title = L.s(R.string.set_086),
+                hint = L.s(R.string.set_087),
                 icon = Ic.chevronRight,
                 divider = false,
                 onClick = onAppSettings,
@@ -382,7 +383,7 @@ fun SettingsScreen(
         }
 
         Text(
-            "Авторадио ${BuildConfig.VERSION_NAME}",
+            L.s(R.string.set_088, BuildConfig.VERSION_NAME),
             fontSize = 12.sp, color = C.faint,
             modifier = Modifier.padding(top = 16.dp, bottom = 20.dp, start = 4.dp),
         )
@@ -400,7 +401,7 @@ private fun Divider() {
 }
 
 @Composable
-private fun Segmented(options: List<Pair<Int, String>>, selected: Int, small: Boolean = false, onSelect: (Int) -> Unit) {
+fun Segmented(options: List<Pair<Int, String>>, selected: Int, small: Boolean = false, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -434,6 +435,21 @@ private fun Segmented(options: List<Pair<Int, String>>, selected: Int, small: Bo
     }
 }
 
+/** Язык приложения: как в системе или свой. Названия — на своих языках, чтобы их узнавали. */
+val LANGUAGES = listOf("" to null, "uk" to "Українська", "en" to "English", "ru" to "Русский")
+
+@Composable
+fun LanguagePicker() {
+    val current = L.appLanguage()
+    Text(L.s(R.string.set_lang), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(8.dp))
+    Segmented(
+        LANGUAGES.mapIndexed { i, (_, name) -> i to (name ?: L.s(R.string.set_005)) },
+        LANGUAGES.indexOfFirst { it.first == current }.coerceAtLeast(0),
+        small = true,
+    ) { i -> L.setAppLanguage(LANGUAGES[i].first) }
+}
+
 /** Выбор цвета приложения: готовые, свой (оттенок + яркость) и цвет обоев. */
 @Composable
 private fun AccentPicker(s: Settings) {
@@ -442,7 +458,7 @@ private fun AccentPicker(s: Settings) {
     var customOpen by remember { mutableStateOf(!wallpaper && !isPreset) }
     val custom = customOpen && !wallpaper
 
-    Text("Цвет", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+    Text(L.s(R.string.set_089), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(10.dp))
     Accent.PRESETS.chunked(4).forEach { row ->
         Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -450,7 +466,7 @@ private fun AccentPicker(s: Settings) {
                 Swatch(
                     fill = Brush.linearGradient(listOf(Color(c), Color(c))),
                     selected = !wallpaper && !custom && s.accent == c,
-                    desc = "Цвет",
+                    desc = L.s(R.string.set_089),
                 ) {
                     customOpen = false
                     Prefs.update { it.copy(accent = c, accentSource = Settings.ACCENT_FIXED) }
@@ -459,12 +475,12 @@ private fun AccentPicker(s: Settings) {
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Chip("Свой цвет", custom) {
+        Chip(L.s(R.string.set_090), custom) {
             customOpen = true
             Prefs.update { it.copy(accentSource = Settings.ACCENT_FIXED) }
         }
         if (Accent.wallpaperAvailable()) {
-            Chip("Цвет обоев", wallpaper) {
+            Chip(L.s(R.string.set_091), wallpaper) {
                 customOpen = false
                 Prefs.update { it.copy(accentSource = Settings.ACCENT_WALLPAPER) }
             }
@@ -474,13 +490,13 @@ private fun AccentPicker(s: Settings) {
     if (custom) {
         val hsl = remember(s.accent) { Accent.hsl(s.accent) }
         Spacer(Modifier.height(12.dp))
-        Text("Оттенок", fontSize = 12.sp, color = C.muted)
+        Text(L.s(R.string.set_092), fontSize = 12.sp, color = C.muted)
         GradientSlider(
             value = hsl[0] / 360f,
             brush = Brush.horizontalGradient((0..6).map { Color(Accent.fromHsl(it * 60f, 0.85f, 0.6f)) }),
         ) { v -> Prefs.update { it.copy(accent = Accent.fromHsl(v * 360f, maxOf(hsl[1], 0.6f), hsl[2])) } }
         Spacer(Modifier.height(8.dp))
-        Text("Яркость", fontSize = 12.sp, color = C.muted)
+        Text(L.s(R.string.set_093), fontSize = 12.sp, color = C.muted)
         GradientSlider(
             value = ((hsl[2] - 0.35f) / 0.45f).coerceIn(0f, 1f),
             brush = Brush.horizontalGradient(listOf(0.35f, 0.575f, 0.8f).map { Color(Accent.fromHsl(hsl[0], maxOf(hsl[1], 0.6f), it)) }),
@@ -488,7 +504,7 @@ private fun AccentPicker(s: Settings) {
     }
     if (wallpaper) {
         Text(
-            "Цвет берётся из обоев и меняется вместе с ними.",
+            L.s(R.string.set_094),
             fontSize = 12.sp, color = C.muted, modifier = Modifier.padding(top = 8.dp),
         )
     }
@@ -539,7 +555,7 @@ private fun GradientSlider(value: Float, brush: Brush, onChange: (Float) -> Unit
 @Composable
 private fun ScheduleRow(label: String, stationId: String?, stations: List<Station>, onPick: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val name = stations.firstOrNull { it.id == stationId }?.name ?: "последняя"
+    val name = stations.firstOrNull { it.id == stationId }?.name ?: L.s(R.string.set_095)
     Box {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { open = true }.padding(vertical = 4.dp),
@@ -550,7 +566,7 @@ private fun ScheduleRow(label: String, stationId: String?, stations: List<Statio
             Icon(Ic.chevronDown, null, tint = C.muted, modifier = Modifier.padding(start = 4.dp).size(16.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(C.card)) {
-            DropdownMenuItem(text = { Text("Последняя станция", color = C.text) }, onClick = { onPick(null); open = false })
+            DropdownMenuItem(text = { Text(L.s(R.string.set_096), color = C.text) }, onClick = { onPick(null); open = false })
             stations.forEach { st ->
                 DropdownMenuItem(text = { Text(st.name, color = C.text) }, onClick = { onPick(st.id); open = false })
             }
@@ -562,44 +578,44 @@ private fun ScheduleRow(label: String, stationId: String?, stations: List<Statio
 private fun UpdatesCard(onCheck: () -> Unit, onDownload: (UpdateInfo) -> Unit, onInstall: (java.io.File) -> Unit) {
     val st by Updater.state.collectAsState()
     Card(padding = 16) {
-        CardTitle("Обновления")
-        Text("Установлена версия ${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = C.soft)
+        CardTitle(L.s(R.string.set_097))
+        Text(L.s(R.string.set_098, BuildConfig.VERSION_NAME), fontSize = 13.sp, color = C.soft)
         Spacer(Modifier.height(10.dp))
         when (val u = st) {
-            is UpdateState.Checking -> Text("Проверяю…", fontSize = 13.sp, color = C.muted)
+            is UpdateState.Checking -> Text(L.s(R.string.songs_012), fontSize = 13.sp, color = C.muted)
             is UpdateState.Available -> {
-                Text("Доступна версия ${u.info.version}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = C.accent)
+                Text(L.s(R.string.set_099, u.info.version), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = C.accent)
                 if (u.info.notes.isNotBlank()) {
                     Text(u.info.notes, fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, maxLines = 8, modifier = Modifier.padding(vertical = 6.dp))
                 }
-                PillButton("Скачать и установить", filled = true) { onDownload(u.info) }
+                PillButton(L.s(R.string.set_100), filled = true) { onDownload(u.info) }
             }
             is UpdateState.Downloading -> {
-                Text("Скачиваю ${u.info.version}… ${(u.progress * 100).toInt()}%", fontSize = 13.sp, color = C.soft)
+                Text(L.s(R.string.set_101, u.info.version, (u.progress * 100).toInt()), fontSize = 13.sp, color = C.soft)
                 Spacer(Modifier.height(6.dp))
                 Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.line)) {
                     Box(Modifier.fillMaxWidth(u.progress.coerceAtLeast(0.02f)).height(6.dp).background(C.accent))
                 }
             }
             is UpdateState.Ready -> {
-                Text("Версия ${u.info.version} скачана", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(L.s(R.string.set_102, u.info.version), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "Если Android попросит — разреши установку из «Авторадио». Станции и настройки сохранятся.",
+                    L.s(R.string.set_103),
                     fontSize = 12.sp, color = C.soft, lineHeight = 17.sp, modifier = Modifier.padding(vertical = 6.dp),
                 )
-                PillButton("Установить", filled = true) { onInstall(u.file) }
+                PillButton(L.s(R.string.set_104), filled = true) { onInstall(u.file) }
             }
             is UpdateState.UpToDate -> {
-                Text("Это последняя версия", fontSize = 13.sp, color = C.muted)
+                Text(L.s(R.string.set_105), fontSize = 13.sp, color = C.muted)
                 Spacer(Modifier.height(8.dp))
-                PillButton("Проверить ещё раз", filled = false, onClick = onCheck)
+                PillButton(L.s(R.string.set_106), filled = false, onClick = onCheck)
             }
             is UpdateState.Failed -> {
                 Text(u.message, fontSize = 13.sp, color = C.amber)
                 Spacer(Modifier.height(8.dp))
-                PillButton("Попробовать снова", filled = false, onClick = onCheck)
+                PillButton(L.s(R.string.set_107), filled = false, onClick = onCheck)
             }
-            is UpdateState.Idle -> PillButton("Проверить обновления", filled = false, onClick = onCheck)
+            is UpdateState.Idle -> PillButton(L.s(R.string.set_108), filled = false, onClick = onCheck)
         }
     }
 }
@@ -609,20 +625,20 @@ private fun TrafficCard() {
     val t by Traffic.stats.collectAsState()
     Card(padding = 16) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text("Трафик радио", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(L.s(R.string.set_109), fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text(
-                "сбросить", fontSize = 12.sp, color = C.muted,
+                L.s(R.string.set_110), fontSize = 12.sp, color = C.muted,
                 modifier = Modifier.clickable { Traffic.reset() }.padding(4.dp),
             )
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TrafficCell("Сегодня", t.todayTotal, t.todayMobile, Modifier.weight(1f))
-            TrafficCell("Этот месяц", t.monthTotal, t.monthMobile, Modifier.weight(1f))
+            TrafficCell(L.s(R.string.songs_035), t.todayTotal, t.todayMobile, Modifier.weight(1f))
+            TrafficCell(L.s(R.string.songs_028), t.monthTotal, t.monthMobile, Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Час радио 128 kbps — около 58 МБ. Буфер трафик не увеличивает: качается то же самое, только заранее.",
+            L.s(R.string.set_111),
             fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
         )
     }
@@ -638,16 +654,16 @@ private fun TrafficCell(label: String, total: Long, mobile: Long, modifier: Modi
     ) {
         Text(label, fontSize = 12.sp, color = C.muted)
         Text(mb(total), fontFamily = Chakra, fontWeight = FontWeight.SemiBold, fontSize = 22.sp)
-        Text("моб. сеть ${mb(mobile)}", fontSize = 12.sp, color = C.soft)
+        Text(L.s(R.string.set_112, mb(mobile)), fontSize = 12.sp, color = C.soft)
     }
 }
 
 private fun mb(bytes: Long): String {
     val m = bytes / 1_048_576.0
     return when {
-        m >= 1024 -> "%.1f ГБ".format(m / 1024)
-        m >= 10 -> "%.0f МБ".format(m)
-        else -> "%.1f МБ".format(m)
+        m >= 1024 -> L.s(R.string.set_113).format(m / 1024)
+        m >= 10 -> L.s(R.string.set_114).format(m)
+        else -> L.s(R.string.set_115).format(m)
     }
 }
 
@@ -657,11 +673,11 @@ fun CarPickerDialog(devices: List<Pair<String, String>>, current: String?, onPic
         onDismissRequest = onDismiss,
         containerColor = C.card,
         titleContentColor = C.text,
-        title = { Text("Какое устройство — машина?", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text(L.s(R.string.set_116), fontWeight = FontWeight.Bold, fontSize = 18.sp) },
         text = {
             if (devices.isEmpty()) {
                 Text(
-                    "Сопряжённых устройств нет. Сначала соедини телефон с машиной по Bluetooth.",
+                    L.s(R.string.set_117),
                     color = C.soft, fontSize = 14.sp, lineHeight = 19.sp,
                 )
             } else {
@@ -684,7 +700,7 @@ fun CarPickerDialog(devices: List<Pair<String, String>>, current: String?, onPic
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Закрыть", color = C.muted) }
+            TextButton(onClick = onDismiss) { Text(L.s(R.string.songs_034), color = C.muted) }
         },
     )
 }

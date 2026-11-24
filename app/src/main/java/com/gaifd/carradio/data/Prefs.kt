@@ -65,7 +65,12 @@ data class Settings(
         const val ACCENT_WALLPAPER = 1
 
         /** Периоды для «станции по расписанию». */
-        val PERIODS = listOf("morning" to "Утро · 5–11", "day" to "День · 11–17", "evening" to "Вечер · 17–23", "night" to "Ночь · 23–5")
+        val PERIODS = listOf(
+            "morning" to com.gaifd.carradio.R.string.prefs_morning,
+            "day" to com.gaifd.carradio.R.string.prefs_day,
+            "evening" to com.gaifd.carradio.R.string.prefs_evening,
+            "night" to com.gaifd.carradio.R.string.prefs_night,
+        )
 
         fun periodAt(hour: Int): String = when (hour) {
             in 5..10 -> "morning"

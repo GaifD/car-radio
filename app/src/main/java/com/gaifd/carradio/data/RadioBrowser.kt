@@ -1,5 +1,8 @@
 package com.gaifd.carradio.data
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -51,8 +54,7 @@ object RadioBrowser {
         for (h in hosts) {
             try {
                 val url = URL(
-                    "https://$h.api.radio-browser.info/json/stations/search" +
-                        "?name=$q$country&limit=40&hidebroken=true&order=clickcount&reverse=true"
+                    "https://$h.api.radio-browser.info/json/stations/search?name=$q$country&limit=40&hidebroken=true&order=clickcount&reverse=true"
                 )
                 val c = url.openConnection() as HttpURLConnection
                 c.connectTimeout = 6000
@@ -85,7 +87,7 @@ object RadioBrowser {
                 last = e
             }
         }
-        throw last ?: IOException("Каталог недоступен")
+        throw last ?: IOException(L.s(R.string.catalog_001))
     }
 
     /** Другие ссылки той же станции в каталоге (часто есть варианты 64/128/320 kbps). */

@@ -3,7 +3,7 @@
     <color name="bg">#0A0E11</color>
     <color name="accent">#2DE1D3</color>
 
-    <style name="Theme.CarRadio" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.CarRadio" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:colorAccent">@color/accent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

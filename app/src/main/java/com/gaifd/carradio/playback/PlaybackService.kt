@@ -1,5 +1,7 @@
 package com.gaifd.carradio.playback
 
+import com.gaifd.carradio.L
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -156,10 +158,10 @@ class PlaybackService : MediaSessionService() {
 
     private fun bail() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("service", "Служебное", NotificationManager.IMPORTANCE_MIN))
+        nm.createNotificationChannel(NotificationChannel("service", L.s(R.string.svc_001), NotificationManager.IMPORTANCE_MIN))
         val n = NotificationCompat.Builder(this, "service")
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("Авторадио")
+            .setContentTitle(L.s(R.string.player_002))
             .build()
         try {
             if (Build.VERSION.SDK_INT >= 29) {
