@@ -41,7 +41,7 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("stable")
+            // Ключ задаётся в сборке: github — открытый stable, play — секретный ключ загрузки.
         }
         debug {
             signingConfig = signingConfigs.getByName("stable")
@@ -57,6 +57,7 @@ android {
             dimension = "store"
             buildConfigField("boolean", "IN_APP_UPDATES", "true")
             buildConfigField("boolean", "DIRECT_BATTERY_REQUEST", "true")
+            signingConfig = signingConfigs.getByName("stable")
         }
         create("play") {
             dimension = "store"
