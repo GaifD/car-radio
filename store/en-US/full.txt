@@ -1,0 +1,32 @@
+{NAME} is internet radio made for the car — and just as good at home.
+
+Your car's FM tuner doesn't pick up the stations you want? Play them from your phone over Bluetooth, with the station name and song on the car display.
+
+IN THE CAR
+• Auto-start: the radio turns on by itself when your car connects over Bluetooth and pauses when you turn the engine off.
+• Steering wheel buttons switch stations; the car display shows the song, artist and station.
+• Driving mode: huge buttons, the screen stays on, swipe for the next station.
+• Calls and navigation: the radio pauses for a call and gets quieter while the navigator speaks.
+
+WHEN THE SIGNAL IS BAD
+• Buffer of 10–60 seconds, or up to 3 minutes in Highway mode — the music keeps playing through tunnels and dead zones.
+• Quiet automatic reconnecting, and a countdown of how long the reserve will last.
+• Backup links: if a stream dies, it switches to another link of the same station; on a weak connection it picks a lighter one.
+• “Go live” — reset the buffer and catch up with the broadcast without a gap.
+
+SOUND
+• Smooth crossfade between stations — no silence while the next one loads.
+• Volume leveling between stations and an equalizer with car presets.
+
+STATIONS
+• Search the open Radio Browser catalog by name, with popular stations from your country.
+• Add any stream by link (.mp3, .aac, .m3u, .pls, .m3u8) — it's checked before saving.
+• Station logos are found automatically; four list layouts.
+
+AND ALSO
+• Song history, liked songs and search on YouTube Music, Spotify or Google.
+• Listening stats and a data usage counter.
+• Widget, “Hey Google, play … on {NAME}”, color themes and a light theme.
+• Ukrainian, English and Russian.
+
+No accounts, no ads, no tracking. Everything stays on your phone.

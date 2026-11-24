@@ -52,6 +52,9 @@ class VoiceActivity : Activity() {
         fun bestMatch(query: String, stations: List<Station>): Station? {
             // Убираем из фразы название приложения и «включи»: на русском, украинском и английском.
             var text = query.lowercase()
+            // Сначала — название приложения этой сборки (у версии для Play оно своё).
+            val app = L.s(R.string.app_name).lowercase()
+            for (w in listOf("в $app", "на $app", "on $app", "in $app", app)) text = text.replace(w, " ")
             for (w in listOf(
                 "в авторадио", "на авторадио", "авторадио", "в авторадіо", "на авторадіо", "авторадіо",
                 "on car radio", "in car radio", "car radio",
