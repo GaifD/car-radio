@@ -12,8 +12,8 @@ android {
         applicationId = "com.gaifd.carradio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.3.0"
+        versionCode = 15
+        versionName = "1.3.1"
     }
 
     // Постоянный ключ: каждая новая сборка ставится поверх старой, станции и настройки сохраняются.
@@ -61,6 +61,8 @@ android {
         }
         create("play") {
             dimension = "store"
+            // Своё приложение рядом с GitHub-версией: другой идентификатор, название «Стрілка».
+            applicationId = "com.gaifd.strilka"
             buildConfigField("boolean", "IN_APP_UPDATES", "false")
             buildConfigField("boolean", "DIRECT_BATTERY_REQUEST", "false")
             signingConfigs.findByName("play")?.let { signingConfig = it }

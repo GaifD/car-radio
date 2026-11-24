@@ -55,6 +55,11 @@ class VoiceActivity : Activity() {
             // Сначала — название приложения этой сборки (у версии для Play оно своё).
             val app = L.s(R.string.app_name).lowercase()
             for (w in listOf("в $app", "на $app", "on $app", "in $app", app)) text = text.replace(w, " ")
+            // и склонения: «у Стрілці», «в Стрелке» — по первым буквам названия
+            val stem = app.take(5)
+            if (stem.length >= 4) text = text.split(' ').filterNot { w ->
+                w.startsWith(stem) || w.startsWith(stem.replace('і', 'е'))
+            }.joinToString(" ")
             for (w in listOf(
                 "в авторадио", "на авторадио", "авторадио", "в авторадіо", "на авторадіо", "авторадіо",
                 "on car radio", "in car radio", "car radio",

@@ -1,4 +1,4 @@
-{NAME} is internet radio made for the car — and just as good at home.
+Strilka is internet radio made for the car — and just as good at home.
 
 Your car's FM tuner doesn't pick up the stations you want? Play them from your phone over Bluetooth, with the station name and song on the car display.
 
@@ -26,7 +26,7 @@ STATIONS
 AND ALSO
 • Song history, liked songs and search on YouTube Music, Spotify or Google.
 • Listening stats and a data usage counter.
-• Widget, “Hey Google, play … on {NAME}”, color themes and a light theme.
+• Widget, “Hey Google, play … on Strilka”, color themes and a light theme.
 • Ukrainian, English and Russian.
 
 No accounts, no ads, no tracking. Everything stays on your phone.

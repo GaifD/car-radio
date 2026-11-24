@@ -1,4 +1,4 @@
-# {NAME} — Privacy Policy / Політика конфіденційності / Политика конфиденциальности
+# Strilka — Privacy Policy / Політика конфіденційності / Политика конфиденциальности
 
 Last updated: November 24, 2026
 
@@ -8,7 +8,7 @@ Last updated: November 24, 2026
 
 ## English
 
-{NAME} is an internet radio player. It has no accounts, no ads, no analytics and no crash reporting. The developer does not collect, receive or store any of your data.
+Strilka is an internet radio player. It has no accounts, no ads, no analytics and no crash reporting. The developer does not collect, receive or store any of your data.
 
 **What stays on your device.** Your station list, settings, playback history, liked songs, listening and data-usage statistics, downloaded station logos and the name and Bluetooth address of the car you selected are stored only on your phone. Uninstalling the app or clearing its data deletes all of it.
 
@@ -32,7 +32,7 @@ Last updated: November 24, 2026
 
 ## Українська
 
-{NAME} — програвач інтернет-радіо. У ньому немає акаунтів, реклами, аналітики й звітів про збої. Розробник не збирає, не отримує й не зберігає жодних твоїх даних.
+Strilka — програвач інтернет-радіо. У ньому немає акаунтів, реклами, аналітики й звітів про збої. Розробник не збирає, не отримує й не зберігає жодних твоїх даних.
 
 **Що лишається на пристрої.** Список станцій, налаштування, історія відтворення, улюблені пісні, статистика прослуховування й трафіку, завантажені логотипи станцій, а також назва й Bluetooth-адреса обраної машини зберігаються лише на телефоні. Видалення застосунку або очищення його даних видаляє все це.
 
@@ -56,7 +56,7 @@ Last updated: November 24, 2026
 
 ## Русский
 
-{NAME} — проигрыватель интернет-радио. В нём нет аккаунтов, рекламы, аналитики и отчётов о сбоях. Разработчик не собирает, не получает и не хранит никаких твоих данных.
+Strilka — проигрыватель интернет-радио. В нём нет аккаунтов, рекламы, аналитики и отчётов о сбоях. Разработчик не собирает, не получает и не хранит никаких твоих данных.
 
 **Что остаётся на устройстве.** Список станций, настройки, история воспроизведения, понравившиеся песни, статистика прослушивания и трафика, скачанные логотипы станций, а также название и Bluetooth-адрес выбранной машины хранятся только на телефоне. Удаление приложения или очистка его данных удаляет всё это.
 
