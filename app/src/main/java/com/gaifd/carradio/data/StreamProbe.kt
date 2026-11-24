@@ -1,5 +1,8 @@
 package com.gaifd.carradio.data
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -44,13 +47,13 @@ object StreamProbe {
                     } else {
                         lines.firstOrNull { it.startsWith("http", true) }
                     }
-                    url = next ?: throw IOException("Плейлист пустой")
+                    url = next ?: throw IOException(L.s(R.string.probe_001))
                     continue
                 }
 
                 val audio = type.startsWith("audio/") || type.contains("ogg") ||
                     type.contains("octet-stream") || type.contains("aac") || type.isBlank()
-                if (!audio) throw IOException("Это не аудиопоток (${type.substringBefore(';')})")
+                if (!audio) throw IOException(L.s(R.string.probe_002, type.substringBefore(';')))
 
                 val got = c.inputStream.use { s ->
                     val b = ByteArray(4096)
@@ -62,14 +65,14 @@ object StreamProbe {
                     }
                     total
                 }
-                if (got == 0) throw IOException("Сервер не отдаёт звук")
+                if (got == 0) throw IOException(L.s(R.string.probe_003))
                 val name = c.getHeaderField("icy-name")?.trim()?.takeIf { it.isNotBlank() && it != "no name" }
                 return@withContext ProbeResult(url, name)
             } finally {
                 c.disconnect()
             }
         }
-        throw IOException("Слишком много вложенных плейлистов")
+        throw IOException(L.s(R.string.probe_004))
     }
 
     /** Открывает соединение и сам проходит перенаправления, включая http → https. */
@@ -86,16 +89,16 @@ object StreamProbe {
             if (code in 300..399) {
                 val loc = c.getHeaderField("Location")
                 c.disconnect()
-                if (loc.isNullOrBlank()) throw IOException("Пустое перенаправление")
+                if (loc.isNullOrBlank()) throw IOException(L.s(R.string.probe_005))
                 u = URL(URL(u), loc).toString()
             } else {
                 if (code != 200) {
                     c.disconnect()
-                    throw IOException("Сервер ответил $code")
+                    throw IOException(L.s(R.string.probe_006, code))
                 }
                 return c to u
             }
         }
-        throw IOException("Слишком много перенаправлений")
+        throw IOException(L.s(R.string.probe_007))
     }
 }

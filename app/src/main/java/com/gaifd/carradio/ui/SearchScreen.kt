@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gaifd.carradio.data.Country
 import com.gaifd.carradio.data.FoundStation
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.ProbeResult
@@ -68,9 +72,25 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
-    val ukraine = settings.searchUkraine
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val mine = settings.searchUkraine          // только своя страна
+    val country = remember(settings.country) { Country.current(ctx) }
+    val cc = if (mine) country else null
+    var picking by remember { mutableStateOf(false) }
+    var popular by remember { mutableStateOf<List<FoundStation>>(emptyList()) }
 
-    LaunchedEffect(query, ukraine) {
+    // Пока поле пустое — популярные станции страны (или мира).
+    LaunchedEffect(cc) {
+        popular = try {
+            RadioBrowser.popular(cc)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    LaunchedEffect(query, cc) {
         val q = query.trim()
         if (q.length < 2) {
             results = emptyList()
@@ -82,15 +102,15 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
         loading = true
         message = null
         try {
-            results = RadioBrowser.search(q, ukraine)
+            results = RadioBrowser.search(q, cc)
             if (results.isEmpty()) {
-                message = if (ukraine) "Ничего не нашлось. Попробуй «Все страны» или другое написание." else "Ничего не нашлось."
+                message = if (mine) L.s(R.string.search_001) else L.s(R.string.search_002)
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             results = emptyList()
-            message = "Каталог не отвечает — проверь интернет и попробуй ещё раз."
+            message = L.s(R.string.search_003)
         } finally {
             loading = false
         }
@@ -102,7 +122,7 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        ScreenTitle("Добавить станцию")
+        ScreenTitle(L.s(R.string.search_004))
 
         Row(
             Modifier
@@ -117,7 +137,7 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
             Icon(Ic.search, null, tint = C.muted, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("Название станции", fontSize = 16.sp, color = C.faint)
+                if (query.isEmpty()) Text(L.s(R.string.search_005), fontSize = 16.sp, color = C.faint)
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -137,34 +157,45 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
                         .size(32.dp)
                         .clip(CircleShape)
                         .clickable { query = "" }
-                        .semantics { contentDescription = "Очистить" },
+                        .semantics { contentDescription = L.s(R.string.songs_025) },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Ic.close, null, tint = C.muted, modifier = Modifier.size(18.dp)) }
             }
         }
 
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip("Украина", ukraine) { Prefs.update { it.copy(searchUkraine = true) } }
-            Chip("Все страны", !ukraine) { Prefs.update { it.copy(searchUkraine = false) } }
+            // Чип страны: выбран — нажатие открывает выбор другой страны.
+            Chip(Country.name(country) + "  ▾", mine) {
+                if (mine) picking = true else Prefs.update { it.copy(searchUkraine = true) }
+            }
+            Chip(L.s(R.string.search_007), !mine) { Prefs.update { it.copy(searchUkraine = false) } }
         }
 
-        if (results.isNotEmpty() || message != null) {
-            SectionTitle("Найдено", "каталог Radio Browser")
+        val showPopular = query.trim().length < 2
+        if (showPopular && popular.isNotEmpty()) {
+            SectionTitle(L.s(R.string.search_popular, if (mine) Country.name(country) else L.s(R.string.search_world)), L.s(R.string.search_009))
+        } else if (results.isNotEmpty() || message != null) {
+            SectionTitle(L.s(R.string.search_008), L.s(R.string.search_009))
         }
         message?.let { Text(it, fontSize = 13.sp, color = C.soft, lineHeight = 18.sp, modifier = Modifier.padding(horizontal = 2.dp)) }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            results.forEach { f ->
+            val shown = if (showPopular) popular else results
+            shown.forEach { f ->
                 val added = stations.any { st -> st.id == f.uuid || st.streams.any { it.url == f.url } }
                 ResultRow(f, added) {
                     // Другие ссылки той же станции из выдачи — сразу запасными.
-                    val alts = RadioBrowser.sameStation(Station.normalizeName(f.name), results, setOf(f.url))
+                    val alts = RadioBrowser.sameStation(Station.normalizeName(f.name), shown, setOf(f.url))
                     StationRepo.add(f.toStation(alts))
                 }
             }
         }
 
         AddByUrl()
+        if (picking) CountryPickerDialog(country, onPick = { c ->
+            picking = false
+            Prefs.update { it.copy(country = c, searchUkraine = true) }
+        }, onDismiss = { picking = false })
         Spacer(Modifier.height(16.dp))
     }
 }
@@ -191,7 +222,7 @@ private fun ResultRow(f: FoundStation, added: Boolean, onAdd: () -> Unit) {
             Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Ic.check, null, tint = C.accent, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Есть", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.accent)
+                Text(L.s(R.string.search_010), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = C.accent)
             }
         } else {
             Box(
@@ -200,7 +231,7 @@ private fun ResultRow(f: FoundStation, added: Boolean, onAdd: () -> Unit) {
                     .clip(CircleShape)
                     .border(1.dp, C.border, CircleShape)
                     .clickable(onClick = onAdd)
-                    .semantics { contentDescription = "Добавить ${f.name}" },
+                    .semantics { contentDescription = L.s(R.string.search_011, f.name) },
                 contentAlignment = Alignment.Center,
             ) { Icon(Ic.plus, null, tint = C.accent, modifier = Modifier.size(20.dp)) }
         }
@@ -217,9 +248,9 @@ private fun AddByUrl() {
 
     Spacer(Modifier.height(14.dp))
     Card {
-        Text("Нет в каталоге?", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(L.s(R.string.search_012), fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        Text("Ссылка на поток (.mp3, .aac, .m3u, .pls, .m3u8)", fontSize = 12.sp, color = C.muted)
+        Text(L.s(R.string.search_013), fontSize = 12.sp, color = C.muted)
         Spacer(Modifier.height(6.dp))
         Box(
             Modifier
@@ -256,7 +287,7 @@ private fun AddByUrl() {
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                error = e.message ?: "Не удалось открыть поток"
+                                error = e.message ?: L.s(R.string.songs_015)
                             } finally {
                                 checking = false
                             }
@@ -265,7 +296,7 @@ private fun AddByUrl() {
                     .padding(horizontal = 16.dp, vertical = 11.dp)
             ) {
                 Text(
-                    if (checking) "Проверяю…" else "Проверить и добавить",
+                    if (checking) L.s(R.string.songs_012) else L.s(R.string.search_014),
                     fontSize = 14.sp, fontWeight = FontWeight.Bold,
                     color = if (url.isBlank() || checking) C.muted else C.onAccent,
                 )
@@ -275,7 +306,7 @@ private fun AddByUrl() {
             Spacer(Modifier.height(8.dp))
             Text(error ?: "", fontSize = 12.sp, color = C.amber, lineHeight = 16.sp)
             Text(
-                "Добавить без проверки",
+                L.s(R.string.search_015),
                 fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.accent,
                 modifier = Modifier
                     .padding(top = 4.dp)
@@ -285,7 +316,7 @@ private fun AddByUrl() {
         } else {
             Spacer(Modifier.height(8.dp))
             Text(
-                "Перед сохранением приложение проверит, что поток играет, и подтянет название станции.",
+                L.s(R.string.search_016),
                 fontSize = 12.sp, color = C.soft, lineHeight = 17.sp,
             )
         }
@@ -316,7 +347,7 @@ private fun NameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) 
         containerColor = C.card,
         titleContentColor = C.text,
         textContentColor = C.soft,
-        title = { Text("Как назвать станцию?", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = { Text(L.s(R.string.search_017), fontWeight = FontWeight.Bold, fontSize = 18.sp) },
         text = {
             Box(
                 Modifier
@@ -338,11 +369,11 @@ private fun NameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) 
         },
         confirmButton = {
             TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) {
-                Text("Сохранить", color = C.accent, fontWeight = FontWeight.Bold)
+                Text(L.s(R.string.search_018), color = C.accent, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Отмена", color = C.muted) }
+            TextButton(onClick = onDismiss) { Text(L.s(R.string.songs_027), color = C.muted) }
         },
     )
 }

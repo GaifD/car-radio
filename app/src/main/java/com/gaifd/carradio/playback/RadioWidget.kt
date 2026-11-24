@@ -1,5 +1,7 @@
 package com.gaifd.carradio.playback
 
+import com.gaifd.carradio.L
+
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -22,7 +24,7 @@ class RadioWidget : AppWidgetProvider() {
         StationRepo.init(context)
         val st = RadioBus.state.value
         val name = StationRepo.stations.value.firstOrNull { it.id == (st.stationId ?: Prefs.settings.value.lastStationId) }?.name
-            ?: StationRepo.stations.value.firstOrNull()?.name ?: "Авторадио"
+            ?: StationRepo.stations.value.firstOrNull()?.name ?: L.s(R.string.player_002)
         val track = listOfNotNull(st.trackArtist, st.trackTitle).joinToString(" — ").ifBlank { null }
         render(context, manager, ids, name, track, st.playing)
     }

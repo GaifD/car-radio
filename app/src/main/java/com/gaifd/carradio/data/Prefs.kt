@@ -21,7 +21,9 @@ data class Settings(
     val carMac: String? = null,
     val carName: String? = null,
     val lastStationId: String? = null,
-    val searchUkraine: Boolean = true,
+    val searchUkraine: Boolean = true,          // искать только в своей стране (название поля историческое)
+    val country: String = "",                   // ISO-код страны; пусто — определить по SIM/региону
+    val onboarded: Boolean = false,             // первый запуск пройден
     val stationView: Int = VIEW_GRID,
     val eqPreset: String = "off",
     val eqCustom: List<Int> = listOf(0, 0, 0, 0, 0),   // дБ на 60 / 230 / 910 / 3600 / 14000 Гц
@@ -65,7 +67,12 @@ data class Settings(
         const val ACCENT_WALLPAPER = 1
 
         /** Периоды для «станции по расписанию». */
-        val PERIODS = listOf("morning" to "Утро · 5–11", "day" to "День · 11–17", "evening" to "Вечер · 17–23", "night" to "Ночь · 23–5")
+        val PERIODS = listOf(
+            "morning" to com.gaifd.carradio.R.string.prefs_morning,
+            "day" to com.gaifd.carradio.R.string.prefs_day,
+            "evening" to com.gaifd.carradio.R.string.prefs_evening,
+            "night" to com.gaifd.carradio.R.string.prefs_night,
+        )
 
         fun periodAt(hour: Int): String = when (hour) {
             in 5..10 -> "morning"
@@ -105,6 +112,8 @@ object Prefs {
             carName = sp.getString("carName", null),
             lastStationId = sp.getString("lastStationId", null),
             searchUkraine = sp.getBoolean("searchUkraine", d.searchUkraine),
+            country = sp.getString("country", "") ?: "",
+            onboarded = sp.getBoolean("onboarded", d.onboarded),
             stationView = sp.getInt("stationView", d.stationView),
             eqPreset = sp.getString("eqPreset", d.eqPreset) ?: d.eqPreset,
             eqCustom = sp.getString("eqCustom", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
@@ -142,6 +151,8 @@ object Prefs {
             .putString("carName", s.carName)
             .putString("lastStationId", s.lastStationId)
             .putBoolean("searchUkraine", s.searchUkraine)
+            .putString("country", s.country)
+            .putBoolean("onboarded", s.onboarded)
             .putInt("stationView", s.stationView)
             .putString("eqPreset", s.eqPreset)
             .putString("eqCustom", s.eqCustom.joinToString(","))
@@ -156,6 +167,11 @@ object Prefs {
     var askedNotifications: Boolean
         get() = sp.getBoolean("askedNotif", false)
         set(v) = sp.edit().putBoolean("askedNotif", v).apply()
+
+    /** Время последнего «пульса» играющего радио; 0 — радио остановили сами. Остался после перезапуска — значит, убила система. */
+    var playHeartbeat: Long
+        get() = sp.getLong("playHeartbeat", 0)
+        set(v) = sp.edit().putLong("playHeartbeat", v).apply()
 
     var lastUpdateCheck: Long
         get() = sp.getLong("lastUpdateCheck", 0)

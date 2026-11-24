@@ -1,5 +1,7 @@
 package com.gaifd.carradio.auto
 
+import com.gaifd.carradio.L
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -15,7 +17,7 @@ object Notify {
     fun tapToPlay(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Подключение к машине", NotificationManager.IMPORTANCE_HIGH)
+            NotificationChannel(CHANNEL, L.s(R.string.notify_001), NotificationManager.IMPORTANCE_HIGH)
         )
         val open = PendingIntent.getActivity(
             ctx, 1,
@@ -26,8 +28,8 @@ object Notify {
         )
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("Машина подключена")
-            .setContentText("Нажми, чтобы включить радио. Чтобы включалось само — сними ограничение батареи.")
+            .setContentTitle(L.s(R.string.notify_002))
+            .setContentText(L.s(R.string.notify_003))
             .setStyle(NotificationCompat.BigTextStyle())
             .setContentIntent(open)
             .setAutoCancel(true)

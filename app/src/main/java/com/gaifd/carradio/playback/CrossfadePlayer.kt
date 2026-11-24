@@ -1,5 +1,8 @@
 package com.gaifd.carradio.playback
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.content.Context
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -135,7 +138,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var fadingOut: Slot? = null
     private var fadeRunnable: Runnable? = null
     private var pendingSwitch: Runnable? = null
-    private val incomingTimeout = Runnable { incomingFailed("станция не отвечает") }
+    private val incomingTimeout = Runnable { incomingFailed(L.s(R.string.player_001)) }
 
     private var userPlay = false
     private var transientLoss = false
@@ -157,6 +160,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
     private var lastBuffered = 0L
     private var lastGrowAt = 0L
     private var error: String? = null
+    /** error — не ошибка, а пояснение «перешёл на запасную / облегчённую ссылку»: его оставляем после перехода. */
+    private var errorIsSwitchNote = false
     private var metered = try {
         cm.isActiveNetworkMetered
     } catch (_: Exception) {
@@ -238,7 +243,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             // Магнитола показывает отдельными строками: песня / исполнитель / альбом (= станция).
             val mb = MediaMetadata.Builder()
                 .setTitle(track?.title ?: st.name)
-                .setArtist(track?.artist ?: if (track != null) st.name else "Авторадио")
+                .setArtist(track?.artist ?: if (track != null) st.name else L.s(R.string.player_002))
                 .setAlbumTitle(st.name)
                 .setDisplayTitle(st.name)
                 .setStation(st.name)
@@ -310,6 +315,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     override fun handleRelease(): ListenableFuture<*> {
         if (RadioBus.control === this) RadioBus.control = null
+        Prefs.playHeartbeat = 0
         try {
             cm.unregisterNetworkCallback(netCallback)
         } catch (_: Exception) {
@@ -371,6 +377,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun pausePlayback() {
         userPlay = false
+        Prefs.playHeartbeat = 0
         pendingSwitch?.let { handler.removeCallbacks(it) }
         pendingSwitch = null
         cancelIncoming()
@@ -457,7 +464,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         if (inc.stationId != old?.stationId) notice = null
         lowSince = 0
         skipCount = 0
-        if (error?.contains("запасн") != true && error?.contains("облегч") != true) error = null
+        if (!errorIsSwitchNote) error = null
+        errorIsSwitchNote = false
         lastBuffered = 0
         lastGrowAt = SystemClock.uptimeMillis()
         inc.title?.let { t -> stationName(inc.stationId)?.let { History.add(it, t) } }
@@ -482,7 +490,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val inc = incoming ?: return
         handler.removeCallbacks(incomingTimeout)
         val st = stations.firstOrNull { it.id == inc.stationId }
-        val failedName = st?.name ?: "Станция"
+        val failedName = st?.name ?: L.s(R.string.player_003)
         incoming = null
         releaseSlot(inc)
 
@@ -491,7 +499,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             tried += inc.streamIdx
             val next = st.streams.indices.firstOrNull { it !in tried }
             if (next != null) {
-                error = "$failedName: ссылка не отвечает — пробую запасную"
+                error = L.s(R.string.player_004, failedName)
+                errorIsSwitchNote = true
                 beginLoad(streamIndex = next)
                 invalidate()
                 return
@@ -506,7 +515,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             val idx = (currentIndex() + lastDirection).mod(stations.size)
             currentId = stations[idx].id
             Prefs.update { it.copy(lastStationId = currentId) }
-            error = "$failedName не отвечает — переключаю дальше"
+            error = L.s(R.string.player_005, failedName)
             beginLoad()
             invalidate()
             return
@@ -515,7 +524,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val a = active
         if (a != null && a.stationId == inc.stationId) {
             // Не удалась запасная/облегчённая ссылка, а старая ещё играет — остаёмся на ней.
-            error = "$failedName: $msg, остаюсь на текущей ссылке"
+            error = L.s(R.string.player_006, failedName, msg)
             invalidate()
             return
         }
@@ -760,13 +769,13 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun describe(e: PlaybackException): String = when (e.errorCode) {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "нет связи со станцией"
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> L.s(R.string.player_007)
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
-        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "поток недоступен"
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> L.s(R.string.player_008)
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> "формат не поддерживается"
-        else -> "ошибка воспроизведения"
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> L.s(R.string.player_009)
+        else -> L.s(R.string.player_010)
     }
 
     // ---------- Аудиофокус: звонки, навигатор ----------
@@ -814,6 +823,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun onTick() {
         ticks++
+        if (ticks % 20 == 0) Prefs.playHeartbeat = if (userPlay) System.currentTimeMillis() else 0L
         if (ticks % 10 == 0) {
             Traffic.flush()
             Stats.flush()
@@ -835,8 +845,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
                     // Связь вернулась — коротко сообщаем, сколько её не было.
                     val gone = ((now - offlineSince) / 1000).toInt()
                     if (offlineSince > 0 && gone >= 3) {
-                        notice = if (reconnected) "Связь пропадала на $gone с — переподключился к эфиру"
-                        else "Связь пропадала на $gone с"
+                        notice = if (reconnected) L.s(R.string.player_011, gone)
+                        else L.s(R.string.player_012, gone)
                         noticeUntil = now + 15_000
                     }
                     reconnected = false
@@ -883,7 +893,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         if (st.streams.size < 2 || !networkOk()) return
         lastFailoverAt = now
         val next = (a.streamIdx + 1) % st.streams.size
-        error = "Поток завис — переключаюсь на запасную ссылку"
+        error = L.s(R.string.player_013)
+                errorIsSwitchNote = true
         beginLoad(streamIndex = next)
     }
 
@@ -906,7 +917,8 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         if (lowSince == 0L) lowSince = now
         if (now - lowSince < LOW_QUALITY_AFTER_MS) return
         lowSince = 0
-        error = "Слабая связь — облегчённый поток ${lower.value.bitrate} kbps"
+        error = L.s(R.string.player_014, lower.value.bitrate)
+                errorIsSwitchNote = true
         beginLoad(streamIndex = lower.index)
     }
 
@@ -1004,7 +1016,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
         val a = active?.takeIf { it.stationId == currentId }
         val s = Prefs.settings.value
         val note = if (a != null && a.streamIdx > 0) {
-            if (a.stream.bitrate > 0) "запасная ссылка · ${a.stream.bitrate} kbps" else "запасная ссылка"
+            if (a.stream.bitrate > 0) L.s(R.string.player_015, a.stream.bitrate) else L.s(R.string.player_016)
         } else null
         RadioBus.state.value = RadioUi(
             stationId = currentId,
@@ -1027,7 +1039,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
             notice = notice?.takeIf { SystemClock.uptimeMillis() < noticeUntil },
         )
         // Виджет обновляем только когда что-то видимое поменялось.
-        val name = stations.firstOrNull { it.id == currentId }?.name ?: "Авторадио"
+        val name = stations.firstOrNull { it.id == currentId }?.name ?: L.s(R.string.player_002)
         val key = "$name|$raw|$userPlay"
         if (key != widgetKey) {
             widgetKey = key

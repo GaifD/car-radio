@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
@@ -78,7 +81,7 @@ import com.gaifd.carradio.playback.PlaybackService
 import com.gaifd.carradio.playback.RadioBus
 import com.google.common.util.concurrent.ListenableFuture
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.appcompat.app.AppCompatActivity() {
 
     companion object {
         const val EXTRA_AUTOPLAY = "autoplay"
@@ -97,8 +100,10 @@ class MainActivity : ComponentActivity() {
     private var showDrive by mutableStateOf(false)
     private var songsSegment by mutableIntStateOf(0)
     private var searchQuery by mutableStateOf<String?>(null)
-    private var audioOut by mutableStateOf(AudioOut("Динамик телефона", false))
+    private var audioOut by mutableStateOf(AudioOut(L.s(R.string.out_001), false))
     private var logoStatus by mutableStateOf<String?>(null)
+    private var logoSearching = false
+    private var killedAt by mutableStateOf<String?>(null)
     private var pickLogoFor: String? = null
     private lateinit var audioWatcher: AudioOutWatcher
 
@@ -107,7 +112,7 @@ class MainActivity : ComponentActivity() {
         pickLogoFor = null
         if (uri == null) return@registerForActivityResult
         lifecycleScope.launch {
-            if (!Logos.fromUri(this@MainActivity, id, uri)) toast("Не удалось открыть картинку")
+            if (!Logos.fromUri(this@MainActivity, id, uri)) toast(L.s(R.string.main_001))
         }
     }
 
@@ -115,9 +120,9 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return@registerForActivityResult
         try {
             contentResolver.openOutputStream(uri)?.use { it.write(StationRepo.exportJson().toByteArray()) }
-            toast("Станции сохранены: ${StationRepo.stations.value.size}")
+            toast(L.s(R.string.main_002, StationRepo.stations.value.size))
         } catch (e: Exception) {
-            toast("Не удалось сохранить: ${e.message}")
+            toast(L.s(R.string.main_003, e.message))
         }
     }
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -125,9 +130,9 @@ class MainActivity : ComponentActivity() {
         try {
             val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
             val n = StationRepo.import(StationRepo.parseExport(text))
-            toast(if (n == 0) "Новых станций в файле нет" else "Добавлено станций: $n")
+            toast(if (n == 0) L.s(R.string.main_004) else L.s(R.string.main_005, n))
         } catch (e: Exception) {
-            toast("Это не файл станций Авторадио")
+            toast(L.s(R.string.main_006))
         }
     }
 
@@ -135,11 +140,11 @@ class MainActivity : ComponentActivity() {
     private val btLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         refresh()
         if (ok) showCarPicker = true
-        else toast("Без доступа к Bluetooth приложение не узнает, что подключилась машина")
+        else toast(L.s(R.string.main_007))
     }
     private val cdmLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
         refresh()
-        if (carLinked) toast("Машина привязана")
+        if (carLinked) toast(L.s(R.string.main_008))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -167,7 +172,14 @@ class MainActivity : ComponentActivity() {
         }
         autoplayRequested = intent?.getBooleanExtra(EXTRA_AUTOPLAY, false) == true
 
-        if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
+        // Скачанный APK после установки не нужен (при свежем запуске загрузок ещё нет).
+        try {
+            java.io.File(cacheDir, "updates").listFiles()?.forEach { it.delete() }
+        } catch (_: Exception) {
+        }
+        RadioScreenActions.share = ::shareTrack
+        // Уведомления на первом запуске спрашивает экран приветствия, а не сразу.
+        if (Prefs.settings.value.onboarded && Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
             Prefs.askedNotifications = true
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -199,6 +211,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Радио играло, а сервиса нет — систему остановила его. Подскажем, что настроить.
+        val hb = Prefs.playHeartbeat
+        if (hb > 0 && !PlaybackService.running) {
+            killedAt = java.text.SimpleDateFormat("HH:mm", L.locale()).format(java.util.Date(hb))
+            Prefs.playHeartbeat = 0
+        }
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         controllerFuture = f
@@ -345,7 +363,7 @@ class MainActivity : ComponentActivity() {
             null
         }
         if (cdm == null) {
-            toast("Телефон не поддерживает привязку — хватит снятого ограничения батареи")
+            toast(L.s(R.string.main_009))
             return
         }
         val request = AssociationRequest.Builder()
@@ -361,11 +379,11 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onFailure(error: CharSequence?) {
-                    toast("Не получилось привязать: ${error ?: "машина не найдена"}. Включи Bluetooth в машине и попробуй рядом с ней.")
+                    toast(L.s(R.string.main_011, error?.toString() ?: L.s(R.string.main_020)))
                 }
             }, null)
         } catch (e: Exception) {
-            toast("Не получилось привязать: ${e.message}")
+            toast(L.s(R.string.main_010, e.message))
         }
     }
 
@@ -389,7 +407,23 @@ class MainActivity : ComponentActivity() {
         searchQuery = track
     }
 
+    private fun shareTrack(track: String, station: String) {
+        try {
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, L.s(R.string.share_text, track, station)),
+                    L.s(R.string.share),
+                )
+            )
+        } catch (_: Exception) {
+        }
+    }
+
     private fun openSearch(service: String, q: String) {
+        if (service == "share") {
+            shareTrack(q, History.items.value.firstOrNull { it.track == q }?.station ?: L.s(R.string.app_name))
+            return
+        }
         val enc = Uri.encode(q)
         val tries = when (service) {
             "ytmusic" -> listOf("https://music.youtube.com/search?q=$enc")
@@ -403,20 +437,22 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {
             }
         }
-        toast("Нечем открыть")
+        toast(L.s(R.string.main_012))
     }
 
     /** Логотипы для станций, у которых их нет: ищем в каталоге по названию. */
     private fun fetchLogos() {
-        if (logoStatus?.startsWith("Ищу") == true) return
+        if (logoSearching) return
+        logoSearching = true
         lifecycleScope.launch {
             val (found, total) = Logos.autoFind(StationRepo.stations.value, force = true) { i, n ->
-                logoStatus = "Ищу… $i из $n"
+                logoStatus = L.s(R.string.main_013, i, n)
             }
+            logoSearching = false
             logoStatus = when {
-                total == 0 -> "У всех станций уже есть логотипы"
-                found == total -> "Нашлись все: $found"
-                else -> "Нашлось $found из $total. Остальные — цветными плитками; свою картинку можно поставить, удерживая плитку."
+                total == 0 -> L.s(R.string.main_014)
+                found == total -> L.s(R.string.main_015, found)
+                else -> L.s(R.string.main_016, found, total)
             }
         }
     }
@@ -441,6 +477,36 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(settings.accent, settings.accentSource) {
             kotlinx.coroutines.delay(400) // пока тянут ползунок — не дёргаем виджет на каждый шаг
             com.gaifd.carradio.playback.RadioWidget.refresh(this@MainActivity)
+        }
+
+        // Первый запуск: язык → страна → фон → машина.
+        if (!settings.onboarded) {
+            Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
+                Onboarding(
+                    settings = settings,
+                    sys = SystemStatus(batteryOk, notificationsOk, bluetoothOk, carLinked),
+                    onNotifications = ::fixNotifications,
+                    onBattery = ::fixBattery,
+                    onPickCar = ::pickCar,
+                    onFinish = {
+                        if (settings.country.isBlank()) {
+                            val c = com.gaifd.carradio.data.Country.current(this@MainActivity)
+                            Prefs.update { it.copy(country = c) }
+                        }
+                        Prefs.update { it.copy(onboarded = true) }
+                        tab = if (stations.isEmpty()) 1 else 0
+                    },
+                )
+            }
+            if (showCarPicker) {
+                CarPickerDialog(
+                    devices = bondedDevices(),
+                    current = settings.carMac,
+                    onPick = ::chooseCar,
+                    onDismiss = { showCarPicker = false },
+                )
+            }
+            return
         }
 
         if (showDrive) {
@@ -471,6 +537,8 @@ class MainActivity : ComponentActivity() {
                         history = history,
                         batteryOk = batteryOk,
                         onFixBattery = ::fixBattery,
+                        killedAt = killedAt,
+                        onKilled = { killedAt = null; tab = 3 },
                         onPlay = ::playStation,
                         onToggle = ::toggle,
                         onPrev = { controller?.seekToPreviousMediaItem() },
@@ -532,10 +600,10 @@ class MainActivity : ComponentActivity() {
                     .navigationBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
-                NavItem("Радио", Ic.radio, tab == 0, Modifier.weight(1f)) { onTab(0) }
-                NavItem("Добавить", Ic.search, tab == 1, Modifier.weight(1f)) { onTab(1) }
-                NavItem("Песни", Ic.heart, tab == 2, Modifier.weight(1f)) { onTab(2) }
-                NavItem("Настройки", Ic.sliders, tab == 3, Modifier.weight(1f)) { onTab(3) }
+                NavItem(L.s(R.string.main_017), Ic.radio, tab == 0, Modifier.weight(1f)) { onTab(0) }
+                NavItem(L.s(R.string.main_018), Ic.search, tab == 1, Modifier.weight(1f)) { onTab(1) }
+                NavItem(L.s(R.string.songs_017), Ic.heart, tab == 2, Modifier.weight(1f)) { onTab(2) }
+                NavItem(L.s(R.string.main_019), Ic.sliders, tab == 3, Modifier.weight(1f)) { onTab(3) }
             }
         }
     }

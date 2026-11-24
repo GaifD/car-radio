@@ -1,5 +1,8 @@
 package com.gaifd.carradio.data
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,7 +103,7 @@ object Stats {
             if (!k.startsWith(prefix)) return@mapNotNull null
             val id = k.removePrefix(prefix)
             val ms = (v as? Long) ?: return@mapNotNull null
-            StationStat(id, sp.getString("n|$id", null) ?: "Удалённая станция", ms)
+            StationStat(id, sp.getString("n|$id", null) ?: L.s(R.string.stats_001), ms)
         }.sortedByDescending { it.ms }
 
     @Synchronized

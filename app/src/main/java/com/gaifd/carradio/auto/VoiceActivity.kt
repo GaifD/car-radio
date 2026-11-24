@@ -1,5 +1,8 @@
 package com.gaifd.carradio.auto
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.app.Activity
 import android.app.SearchManager
 import android.os.Bundle
@@ -27,13 +30,13 @@ class VoiceActivity : Activity() {
             ?: ""
         val stations = StationRepo.stations.value
         if (stations.isEmpty()) {
-            Toast.makeText(this, "Сначала добавь станции в Авторадио", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, L.s(R.string.voice_001), Toast.LENGTH_LONG).show()
             finish()
             return
         }
         val match = if (query.isBlank()) null else bestMatch(query, stations)
         if (query.isNotBlank() && match == null) {
-            Toast.makeText(this, "Не нашёл станцию «$query» — включаю последнюю", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, L.s(R.string.voice_002, query), Toast.LENGTH_LONG).show()
         }
         val i = Intent(this, PlaybackService::class.java).setAction(PlaybackService.ACTION_AUTOPLAY)
         match?.let { i.putExtra(PlaybackService.EXTRA_STATION, it.id) }
@@ -47,11 +50,14 @@ class VoiceActivity : Activity() {
     companion object {
         /** Похожесть по названию: «хит фм», «hit fm», «Хіт» — всё найдёт «Хіт FM». */
         fun bestMatch(query: String, stations: List<Station>): Station? {
-            val q = Station.normalizeName(
-                query.lowercase()
-                    .replace("в авторадио", "").replace("на авторадио", "").replace("авторадио", "")
-                    .replace("включи", "").replace("радиостанцию", "").replace("станцию", "")
-            )
+            // Убираем из фразы название приложения и «включи»: на русском, украинском и английском.
+            var text = query.lowercase()
+            for (w in listOf(
+                "в авторадио", "на авторадио", "авторадио", "в авторадіо", "на авторадіо", "авторадіо",
+                "on car radio", "in car radio", "car radio",
+                "включи", "увімкни", "ввімкни", "play", "радиостанцию", "радіостанцію", "станцию", "станцію", "station",
+            )) text = text.replace(w, " ")
+            val q = Station.normalizeName(text)
             if (q.isBlank()) return null
             var best: Station? = null
             var bestScore = 0.0

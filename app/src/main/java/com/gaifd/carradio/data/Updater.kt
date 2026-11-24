@@ -1,5 +1,8 @@
 package com.gaifd.carradio.data
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -70,7 +73,7 @@ object Updater {
             _state.value = UpdateState.Available(info)
             info
         } catch (e: Exception) {
-            _state.value = UpdateState.Failed("Не удалось проверить: нет связи с GitHub")
+            _state.value = UpdateState.Failed(L.s(R.string.upd_001))
             null
         }
     }
@@ -106,7 +109,7 @@ object Updater {
             c.disconnect()
             _state.value = UpdateState.Ready(info, file)
         } catch (e: Exception) {
-            _state.value = UpdateState.Failed("Не удалось скачать обновление")
+            _state.value = UpdateState.Failed(L.s(R.string.upd_002))
         }
     }
 

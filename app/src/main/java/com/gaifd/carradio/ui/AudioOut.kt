@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import android.content.Context
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -29,7 +32,7 @@ class AudioOutWatcher(ctx: Context, private val onChange: (AudioOut) -> Unit) {
     }
 
     fun current(): AudioOut {
-        val devices = am?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: return AudioOut("Динамик телефона", false)
+        val devices = am?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: return AudioOut(L.s(R.string.out_001), false)
         val bt = devices.firstOrNull {
             it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                 (Build.VERSION.SDK_INT >= 31 && (it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER))
@@ -39,7 +42,7 @@ class AudioOutWatcher(ctx: Context, private val onChange: (AudioOut) -> Unit) {
             it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
                 it.type == AudioDeviceInfo.TYPE_USB_HEADSET
         }
-        if (wired != null) return AudioOut("Наушники", false)
-        return AudioOut("Динамик телефона", false)
+        if (wired != null) return AudioOut(L.s(R.string.out_002), false)
+        return AudioOut(L.s(R.string.out_001), false)
     }
 }

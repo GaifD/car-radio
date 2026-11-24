@@ -1,5 +1,8 @@
 package com.gaifd.carradio.ui
 
+import com.gaifd.carradio.R
+import com.gaifd.carradio.L
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,6 +77,8 @@ fun RadioScreen(
     update: String?,
     onUpdate: () -> Unit,
     onDrive: () -> Unit,
+    killedAt: String? = null,
+    onKilled: () -> Unit = {},
 ) {
     val current = stations.firstOrNull { it.id == ui.stationId } ?: stations.firstOrNull()
     Column(
@@ -84,39 +89,43 @@ fun RadioScreen(
     ) {
         Header(settings, ui, output, onDrive)
 
+        if (killedAt != null) {
+            Banner(L.s(R.string.bg_killed, killedAt), onKilled)
+            Spacer(Modifier.height(10.dp))
+        }
         if (update != null) {
-            Banner("Есть новая версия $update — нажми, чтобы обновить", onUpdate)
+            Banner(L.s(R.string.radio_001, update), onUpdate)
             Spacer(Modifier.height(10.dp))
         }
         if (!batteryOk) {
-            Banner("Телефон может выключить радио в фоне. Нажми, чтобы снять ограничение батареи.", onFixBattery)
+            Banner(L.s(R.string.radio_002), onFixBattery)
             Spacer(Modifier.height(10.dp))
         }
 
         if (current == null) {
             Card {
-                Text("Станций пока нет", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(L.s(R.string.radio_003), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Найди свои станции по названию во вкладке «Добавить» — одна кнопка, и она здесь.",
+                    L.s(R.string.radio_004),
                     fontSize = 13.sp, color = C.soft, lineHeight = 18.sp,
                 )
                 Spacer(Modifier.height(12.dp))
-                PillButton("Добавить станции", filled = true, onClick = onGoAdd)
+                PillButton(L.s(R.string.radio_005), filled = true, onClick = onGoAdd)
             }
         } else {
             NowPlaying(current, ui, settings, onToggle, onPrev, onNext)
-            SectionTitle("Мои станции", "удерживай — меню")
+            SectionTitle(L.s(R.string.radio_006), L.s(R.string.radio_007))
             StationList(settings.stationView, stations, ui.stationId, onPlay, onEditStreams)
             if (history.isNotEmpty()) {
-                SectionTitle("Недавно играло", null)
+                SectionTitle(L.s(R.string.radio_008), null)
                 Card(padding = 14) {
                     history.take(5).forEachIndexed { i, h ->
                         HistoryRow(h, divider = i < minOf(4, history.size - 1), onSearch = onSearchTrack)
                     }
                     if (history.size > 5) {
                         Text(
-                            "Вся история (${history.size})",
+                            L.s(R.string.radio_009, history.size),
                             fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = C.accent,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -139,11 +148,11 @@ private fun Header(settings: Settings, ui: RadioUi, output: AudioOut, onDrive: (
         else -> C.faint
     }
     val status = when {
-        ui.offline -> "нет связи · играет из буфера"
-        ui.interrupted -> "пауза на время звонка"
-        ui.playing && ui.loading -> "подключаюсь…"
-        ui.playing -> "в эфире"
-        else -> "пауза"
+        ui.offline -> L.s(R.string.radio_010)
+        ui.interrupted -> L.s(R.string.radio_011)
+        ui.playing && ui.loading -> L.s(R.string.drive_002)
+        ui.playing -> L.s(R.string.drive_004)
+        else -> L.s(R.string.drive_005)
     }
     Row(
         Modifier.fillMaxWidth().padding(start = 4.dp, top = 18.dp, bottom = 12.dp),
@@ -162,7 +171,7 @@ private fun Header(settings: Settings, ui: RadioUi, output: AudioOut, onDrive: (
                 .clip(CircleShape)
                 .border(1.dp, C.border, CircleShape)
                 .clickable(onClick = onDrive)
-                .semantics { contentDescription = "Режим за рулём" },
+                .semantics { contentDescription = L.s(R.string.radio_012) },
             contentAlignment = Alignment.Center,
         ) { Icon(Ic.wheel, null, tint = C.soft, modifier = Modifier.size(22.dp)) }
         Spacer(Modifier.width(8.dp))
@@ -180,7 +189,7 @@ private fun Header(settings: Settings, ui: RadioUi, output: AudioOut, onDrive: (
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                if (settings.highway) "ТРАССА · ВКЛ" else "Трасса",
+                if (settings.highway) L.s(R.string.radio_013) else L.s(R.string.radio_014),
                 fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 color = if (settings.highway) C.accent else C.soft,
                 letterSpacing = if (settings.highway) 0.5.sp else 0.sp,
@@ -201,10 +210,10 @@ private fun NowPlaying(
     val label: String
     val labelColor: Color
     when {
-        ui.offline -> { label = "НЕТ СВЯЗИ"; labelColor = C.amber }
-        ui.playing && ui.loading -> { label = "ЗАГРУЗКА"; labelColor = C.soft }
-        ui.playing -> { label = "В ЭФИРЕ"; labelColor = C.accent }
-        else -> { label = "ПАУЗА"; labelColor = C.muted }
+        ui.offline -> { label = L.s(R.string.radio_015); labelColor = C.amber }
+        ui.playing && ui.loading -> { label = L.s(R.string.radio_016); labelColor = C.soft }
+        ui.playing -> { label = L.s(R.string.radio_017); labelColor = C.accent }
+        else -> { label = L.s(R.string.radio_018); labelColor = C.muted }
     }
 
     Column(
@@ -229,7 +238,19 @@ private fun NowPlaying(
                 if (ui.trackArtist != null) OneLine(ui.trackArtist, 13, color = C.muted)
             }
             val raw = ui.rawTrack
-            if (raw != null) HeartButton(st.name, raw)
+            if (raw != null) {
+                Column {
+                    HeartButton(st.name, raw)
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { RadioScreenActions.share?.invoke(raw, st.name) }
+                            .semantics { contentDescription = L.s(R.string.share) },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Ic.share, null, tint = C.muted, modifier = Modifier.size(20.dp)) }
+                }
+            }
         }
 
         Row(
@@ -237,13 +258,13 @@ private fun NowPlaying(
             horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            RoundButton(56, filled = false, desc = "Предыдущая станция", onClick = onPrev) {
+            RoundButton(56, filled = false, desc = L.s(R.string.drive_008), onClick = onPrev) {
                 Icon(Ic.prev, null, tint = C.text, modifier = Modifier.size(24.dp))
             }
-            RoundButton(80, filled = true, desc = if (ui.playing) "Пауза" else "Играть", onClick = onToggle) {
+            RoundButton(80, filled = true, desc = if (ui.playing) L.s(R.string.drive_009) else L.s(R.string.drive_010), onClick = onToggle) {
                 Icon(if (ui.playing) Ic.pause else Ic.play, null, tint = C.onAccent, modifier = Modifier.size(32.dp))
             }
-            RoundButton(56, filled = false, desc = "Следующая станция", onClick = onNext) {
+            RoundButton(56, filled = false, desc = L.s(R.string.drive_011), onClick = onNext) {
                 Icon(Ic.next, null, tint = C.text, modifier = Modifier.size(24.dp))
             }
         }
@@ -262,7 +283,7 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
     // Буфер выключен: ни полоски, ни отставания — только «нет связи», если она пропала.
     if (!ui.bufferOn) {
         if (ui.playing && ui.offline) {
-            Text("нет связи · переподключаюсь", fontSize = 12.sp, color = C.amber)
+            Text(L.s(R.string.radio_019), fontSize = 12.sp, color = C.amber)
         }
         ui.notice?.let { Text(it, fontSize = 12.sp, color = C.muted, lineHeight = 16.sp) }
         return
@@ -273,19 +294,19 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
     val goal = (ui.targetMs / 1000).toInt()
     val right = when {
         !ui.playing -> ""
-        ui.offline -> "нет связи"
-        ui.loading -> "подключаюсь"
-        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) "копится" else "не полный"
-        else -> "полный"
+        ui.offline -> L.s(R.string.radio_020)
+        ui.loading -> L.s(R.string.radio_021)
+        ui.bufferMs < ui.targetMs - 2000 -> if (settings.growBuffer) L.s(R.string.radio_022) else L.s(R.string.radio_023)
+        else -> L.s(R.string.radio_024)
     }
     val color = if (ui.offline) C.amber else C.accent
     val frac = if (ui.targetMs > 0) (ui.bufferMs.toFloat() / ui.targetMs).coerceIn(0f, 1f) else 0f
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) {
             // «Буфер 7 из 30 с»: сколько в запасе и сколько копим. Справа — только состояние.
-            Text("Буфер ", fontSize = 12.sp, color = C.muted)
+            Text(L.s(R.string.radio_025), fontSize = 12.sp, color = C.muted)
             Text("$sec", fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = if (ui.offline) C.amber else C.text)
-            Text(" из $goal с", fontSize = 12.sp, color = C.muted)
+            Text(L.s(R.string.radio_026, goal), fontSize = 12.sp, color = C.muted)
             Spacer(Modifier.weight(1f))
             Text(right, fontSize = 12.sp, color = if (ui.offline) C.amber else C.muted)
         }
@@ -312,7 +333,7 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
     if (canGoLive) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "слышишь эфир $sec с назад",
+                L.s(R.string.radio_027, sec),
                 fontSize = 12.sp, color = C.muted, modifier = Modifier.weight(1f),
             )
             Box(
@@ -324,7 +345,7 @@ private fun BufferBar(ui: RadioUi, settings: Settings) {
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("В прямой эфир", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent)
+                Text(L.s(R.string.radio_028), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = C.accent)
             }
         }
     }
@@ -337,14 +358,14 @@ private fun StreamInfo(ui: RadioUi) {
     val left = listOfNotNull(
         ui.codec,
         if (ui.bitrateKbps > 0) "${ui.bitrateKbps} kbps" else null,
-    ).joinToString(" · ").ifBlank { "поток" }
+    ).joinToString(" · ").ifBlank { L.s(R.string.radio_029) }
     // Приходит заметно меньше, чем нужно для звука, — запас тает.
     val slow = ui.offline || (ui.bitrateKbps > 0 && ui.rxKbps < ui.bitrateKbps * 0.85 && ui.bufferMs < ui.targetMs - 2000)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(left, fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold, color = C.soft)
             Spacer(Modifier.weight(1f))
-            Text("приём ", fontSize = 12.sp, color = C.muted)
+            Text(L.s(R.string.radio_030), fontSize = 12.sp, color = C.muted)
             Text(
                 "${ui.rxKbps} kbps",
                 fontSize = 12.sp, fontFamily = Chakra, fontWeight = FontWeight.SemiBold,
@@ -433,7 +454,7 @@ fun HeartButton(station: String, track: String, size: Int = 40) {
             .size(size.dp)
             .clip(CircleShape)
             .clickable { Favorites.toggle(station, track) }
-            .semantics { contentDescription = if (liked) "Убрать из понравившихся" else "Нравится" },
+            .semantics { contentDescription = if (liked) L.s(R.string.radio_031) else L.s(R.string.radio_032) },
         contentAlignment = Alignment.Center,
     ) {
         Icon(if (liked) Ic.heartFilled else Ic.heart, null, tint = if (liked) C.accent else C.muted, modifier = Modifier.size((size * 0.55f).dp))
@@ -499,7 +520,7 @@ private fun StationTile(
     val sub = listOf(
         st.genre,
         if (st.bitrate > 0 && view == Settings.VIEW_LIST) "${st.bitrate} kbps" else "",
-        if (st.alts.isNotEmpty()) "+${st.alts.size} ссыл." else "",
+        if (st.alts.isNotEmpty()) L.s(R.string.radio_033, st.alts.size) else "",
     ).filter { it.isNotBlank() }.joinToString(" · ")
 
     Box(modifier) {
@@ -559,27 +580,27 @@ private fun StationMenu(st: Station, open: Boolean, isFirst: Boolean, isLast: Bo
     val hasLogo = Logos.has(st.id)
     DropdownMenu(expanded = open, onDismissRequest = onDismiss, modifier = Modifier.background(C.card)) {
         DropdownMenuItem(
-            text = { Text("Ссылки потока (${st.streams.size})", color = C.text) },
+            text = { Text(L.s(R.string.radio_034, st.streams.size), color = C.text) },
             onClick = { onDismiss(); onEditStreams() },
         )
         DropdownMenuItem(
-            text = { Text(if (hasLogo) "Сменить логотип" else "Свой логотип", color = C.text) },
+            text = { Text(if (hasLogo) L.s(R.string.radio_035) else L.s(R.string.radio_036), color = C.text) },
             onClick = { onDismiss(); RadioScreenActions.pickLogo?.invoke(st.id) },
         )
         if (hasLogo) DropdownMenuItem(
-            text = { Text("Убрать логотип", color = C.text) },
+            text = { Text(L.s(R.string.radio_037), color = C.text) },
             onClick = { onDismiss(); Logos.remove(st.id); Logos.dontSearch(st.id); StationRepo.setLogo(st.id, "") },
         )
         if (!isFirst) DropdownMenuItem(
-            text = { Text("Сдвинуть раньше", color = C.text) },
+            text = { Text(L.s(R.string.radio_038), color = C.text) },
             onClick = { StationRepo.move(st.id, -1); onDismiss() },
         )
         if (!isLast) DropdownMenuItem(
-            text = { Text("Сдвинуть позже", color = C.text) },
+            text = { Text(L.s(R.string.radio_039), color = C.text) },
             onClick = { StationRepo.move(st.id, 1); onDismiss() },
         )
         DropdownMenuItem(
-            text = { Text("Удалить", color = C.amber) },
+            text = { Text(L.s(R.string.songs_005), color = C.amber) },
             onClick = { StationRepo.remove(st.id); Logos.remove(st.id); onDismiss() },
         )
     }
@@ -588,4 +609,5 @@ private fun StationMenu(st: Station, open: Boolean, isFirst: Boolean, isLast: Bo
 /** Действия, которым нужна Activity (выбор картинки из галереи). */
 object RadioScreenActions {
     var pickLogo: ((String) -> Unit)? = null
+    var share: ((track: String, station: String) -> Unit)? = null
 }
