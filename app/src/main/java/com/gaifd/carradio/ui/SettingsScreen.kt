@@ -92,7 +92,8 @@ fun SettingsScreen(
         Card(padding = 16) {
             CardTitle(L.s(R.string.set_001))
             LanguagePicker()
-            Spacer(Modifier.height(14.dp))
+            CountryRow(s)
+            Spacer(Modifier.height(6.dp))
             Text(L.s(R.string.set_002), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Segmented(
@@ -373,13 +374,24 @@ fun SettingsScreen(
                     onClick = onPickCar,
                 )
             }
-            ActionRow(
-                title = L.s(R.string.set_086),
-                hint = L.s(R.string.set_087),
-                icon = Ic.chevronRight,
-                divider = false,
-                onClick = onAppSettings,
-            )
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            if (DeviceGuide.hasExtra) {
+                ActionRow(
+                    title = L.s(R.string.dev_extra, DeviceGuide.brand),
+                    hint = DeviceGuide.steps(),
+                    icon = Ic.chevronRight,
+                    divider = false,
+                    onClick = { DeviceGuide.open(ctx) },
+                )
+            } else {
+                ActionRow(
+                    title = L.s(R.string.dev_open),
+                    hint = DeviceGuide.steps(),
+                    icon = Ic.chevronRight,
+                    divider = false,
+                    onClick = onAppSettings,
+                )
+            }
         }
 
         Text(
@@ -448,6 +460,24 @@ fun LanguagePicker() {
         LANGUAGES.indexOfFirst { it.first == current }.coerceAtLeast(0),
         small = true,
     ) { i -> L.setAppLanguage(LANGUAGES[i].first) }
+}
+
+@Composable
+fun CountryRow(s: Settings) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val code = remember(s.country) { com.gaifd.carradio.data.Country.current(ctx) }
+    var open by remember { mutableStateOf(false) }
+    ActionRow(
+        title = L.s(R.string.country_title),
+        hint = L.s(R.string.country_hint, com.gaifd.carradio.data.Country.name(code)),
+        icon = Ic.chevronRight,
+        divider = false,
+        onClick = { open = true },
+    )
+    if (open) CountryPickerDialog(code, onPick = { c ->
+        open = false
+        Prefs.update { it.copy(country = c, searchUkraine = true) }
+    }, onDismiss = { open = false })
 }
 
 /** Выбор цвета приложения: готовые, свой (оттенок + яркость) и цвет обоев. */

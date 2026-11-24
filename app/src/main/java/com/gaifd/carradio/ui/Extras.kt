@@ -349,7 +349,7 @@ fun SearchChooser(query: String, onPick: (String) -> Unit, onDismiss: () -> Unit
         title = { Text(query, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 3) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("ytmusic" to "YouTube Music", "spotify" to "Spotify", "google" to "Google").forEach { (id, label) ->
+                listOf("ytmusic" to "YouTube Music", "spotify" to "Spotify", "google" to "Google", "share" to L.s(R.string.share)).forEach { (id, label) ->
                     Box(
                         Modifier
                             .fillMaxWidth()

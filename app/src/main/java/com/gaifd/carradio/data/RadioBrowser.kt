@@ -47,14 +47,20 @@ data class FoundStation(
 object RadioBrowser {
     private val hosts = listOf("de1", "de2", "fi1", "nl1", "at1")
 
-    suspend fun search(query: String, ukraineOnly: Boolean): List<FoundStation> = withContext(Dispatchers.IO) {
-        val q = URLEncoder.encode(query.trim(), "UTF-8")
-        val country = if (ukraineOnly) "&countrycode=UA" else ""
+    /** Поиск по названию; countryCode = null — по всем странам. */
+    suspend fun search(query: String, countryCode: String?): List<FoundStation> =
+        request("name=" + URLEncoder.encode(query.trim(), "UTF-8") + (countryCode?.let { "&countrycode=$it" } ?: ""))
+
+    /** Самые популярные станции страны (или мира, если countryCode = null) — для пустого поиска. */
+    suspend fun popular(countryCode: String?): List<FoundStation> =
+        request(countryCode?.let { "countrycode=$it" } ?: "")
+
+    private suspend fun request(params: String): List<FoundStation> = withContext(Dispatchers.IO) {
         var last: Exception? = null
         for (h in hosts) {
             try {
                 val url = URL(
-                    "https://$h.api.radio-browser.info/json/stations/search?name=$q$country&limit=40&hidebroken=true&order=clickcount&reverse=true"
+                    "https://$h.api.radio-browser.info/json/stations/search?$params&limit=40&hidebroken=true&order=clickcount&reverse=true"
                 )
                 val c = url.openConnection() as HttpURLConnection
                 c.connectTimeout = 6000
@@ -94,14 +100,14 @@ object RadioBrowser {
     suspend fun findAlternatives(st: Station): List<Stream> {
         val key = Station.normalizeName(st.name)
         if (key.isBlank()) return emptyList()
-        val found = search(st.name, ukraineOnly = false)
+        val found = search(st.name, null)
         return sameStation(key, found, st.streams.map { it.url }.toSet())
     }
 
     /** Та же станция в каталоге (по id или названию) — оттуда логотип и сайт. */
     suspend fun lookup(st: Station): List<FoundStation> {
         val key = Station.normalizeName(st.name)
-        val found = search(st.name, ukraineOnly = false)
+        val found = search(st.name, null)
         return found.filter { it.uuid == st.id || Station.normalizeName(it.name) == key }
             .sortedByDescending { if (it.uuid == st.id) 1 else 0 }
     }

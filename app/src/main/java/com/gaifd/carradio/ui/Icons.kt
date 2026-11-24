@@ -87,5 +87,12 @@ object Ic {
     val heart by lazy { stroke(2f, "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z") }
     val heartFilled by lazy { filled("M12 20.5s-7.5-4.6-7.5-10.5a4.3 4.3 0 0 1 7.5-2.9a4.3 4.3 0 0 1 7.5 2.9c0 5.9-7.5 10.5-7.5 10.5z") }
     val image by lazy { stroke(2f, "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M8 10a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M21 16l-5-5L5 20") }
+    val share by lazy {
+        stroke(
+            2f,
+            "M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0", "M3 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0", "M15 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
+            "M8.6 13.5l6.8 3.9", "M15.4 6.6l-6.8 3.9",
+        )
+    }
     val close by lazy { stroke(2f, "M6 6l12 12", "M18 6L6 18") }
 }

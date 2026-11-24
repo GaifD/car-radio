@@ -77,6 +77,8 @@ fun RadioScreen(
     update: String?,
     onUpdate: () -> Unit,
     onDrive: () -> Unit,
+    killedAt: String? = null,
+    onKilled: () -> Unit = {},
 ) {
     val current = stations.firstOrNull { it.id == ui.stationId } ?: stations.firstOrNull()
     Column(
@@ -87,6 +89,10 @@ fun RadioScreen(
     ) {
         Header(settings, ui, output, onDrive)
 
+        if (killedAt != null) {
+            Banner(L.s(R.string.bg_killed, killedAt), onKilled)
+            Spacer(Modifier.height(10.dp))
+        }
         if (update != null) {
             Banner(L.s(R.string.radio_001, update), onUpdate)
             Spacer(Modifier.height(10.dp))
@@ -232,7 +238,19 @@ private fun NowPlaying(
                 if (ui.trackArtist != null) OneLine(ui.trackArtist, 13, color = C.muted)
             }
             val raw = ui.rawTrack
-            if (raw != null) HeartButton(st.name, raw)
+            if (raw != null) {
+                Column {
+                    HeartButton(st.name, raw)
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { RadioScreenActions.share?.invoke(raw, st.name) }
+                            .semantics { contentDescription = L.s(R.string.share) },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Ic.share, null, tint = C.muted, modifier = Modifier.size(20.dp)) }
+                }
+            }
         }
 
         Row(
@@ -591,4 +609,5 @@ private fun StationMenu(st: Station, open: Boolean, isFirst: Boolean, isLast: Bo
 /** Действия, которым нужна Activity (выбор картинки из галереи). */
 object RadioScreenActions {
     var pickLogo: ((String) -> Unit)? = null
+    var share: ((track: String, station: String) -> Unit)? = null
 }

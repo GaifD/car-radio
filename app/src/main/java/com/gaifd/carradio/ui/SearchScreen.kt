@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gaifd.carradio.data.Country
 import com.gaifd.carradio.data.FoundStation
 import com.gaifd.carradio.data.Prefs
 import com.gaifd.carradio.data.ProbeResult
@@ -71,9 +72,25 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
-    val ukraine = settings.searchUkraine
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val mine = settings.searchUkraine          // только своя страна
+    val country = remember(settings.country) { Country.current(ctx) }
+    val cc = if (mine) country else null
+    var picking by remember { mutableStateOf(false) }
+    var popular by remember { mutableStateOf<List<FoundStation>>(emptyList()) }
 
-    LaunchedEffect(query, ukraine) {
+    // Пока поле пустое — популярные станции страны (или мира).
+    LaunchedEffect(cc) {
+        popular = try {
+            RadioBrowser.popular(cc)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    LaunchedEffect(query, cc) {
         val q = query.trim()
         if (q.length < 2) {
             results = emptyList()
@@ -85,9 +102,9 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
         loading = true
         message = null
         try {
-            results = RadioBrowser.search(q, ukraine)
+            results = RadioBrowser.search(q, cc)
             if (results.isEmpty()) {
-                message = if (ukraine) L.s(R.string.search_001) else L.s(R.string.search_002)
+                message = if (mine) L.s(R.string.search_001) else L.s(R.string.search_002)
             }
         } catch (e: CancellationException) {
             throw e
@@ -147,27 +164,38 @@ fun SearchScreen(stations: List<Station>, settings: Settings) {
         }
 
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(L.s(R.string.search_006), ukraine) { Prefs.update { it.copy(searchUkraine = true) } }
-            Chip(L.s(R.string.search_007), !ukraine) { Prefs.update { it.copy(searchUkraine = false) } }
+            // Чип страны: выбран — нажатие открывает выбор другой страны.
+            Chip(Country.name(country) + "  ▾", mine) {
+                if (mine) picking = true else Prefs.update { it.copy(searchUkraine = true) }
+            }
+            Chip(L.s(R.string.search_007), !mine) { Prefs.update { it.copy(searchUkraine = false) } }
         }
 
-        if (results.isNotEmpty() || message != null) {
+        val showPopular = query.trim().length < 2
+        if (showPopular && popular.isNotEmpty()) {
+            SectionTitle(L.s(R.string.search_popular, if (mine) Country.name(country) else L.s(R.string.search_world)), L.s(R.string.search_009))
+        } else if (results.isNotEmpty() || message != null) {
             SectionTitle(L.s(R.string.search_008), L.s(R.string.search_009))
         }
         message?.let { Text(it, fontSize = 13.sp, color = C.soft, lineHeight = 18.sp, modifier = Modifier.padding(horizontal = 2.dp)) }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            results.forEach { f ->
+            val shown = if (showPopular) popular else results
+            shown.forEach { f ->
                 val added = stations.any { st -> st.id == f.uuid || st.streams.any { it.url == f.url } }
                 ResultRow(f, added) {
                     // Другие ссылки той же станции из выдачи — сразу запасными.
-                    val alts = RadioBrowser.sameStation(Station.normalizeName(f.name), results, setOf(f.url))
+                    val alts = RadioBrowser.sameStation(Station.normalizeName(f.name), shown, setOf(f.url))
                     StationRepo.add(f.toStation(alts))
                 }
             }
         }
 
         AddByUrl()
+        if (picking) CountryPickerDialog(country, onPick = { c ->
+            picking = false
+            Prefs.update { it.copy(country = c, searchUkraine = true) }
+        }, onDismiss = { picking = false })
         Spacer(Modifier.height(16.dp))
     }
 }

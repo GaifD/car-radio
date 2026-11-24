@@ -103,6 +103,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
     private var audioOut by mutableStateOf(AudioOut(L.s(R.string.out_001), false))
     private var logoStatus by mutableStateOf<String?>(null)
     private var logoSearching = false
+    private var killedAt by mutableStateOf<String?>(null)
     private var pickLogoFor: String? = null
     private lateinit var audioWatcher: AudioOutWatcher
 
@@ -171,7 +172,14 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         }
         autoplayRequested = intent?.getBooleanExtra(EXTRA_AUTOPLAY, false) == true
 
-        if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
+        // Скачанный APK после установки не нужен (при свежем запуске загрузок ещё нет).
+        try {
+            java.io.File(cacheDir, "updates").listFiles()?.forEach { it.delete() }
+        } catch (_: Exception) {
+        }
+        RadioScreenActions.share = ::shareTrack
+        // Уведомления на первом запуске спрашивает экран приветствия, а не сразу.
+        if (Prefs.settings.value.onboarded && Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) && !Prefs.askedNotifications) {
             Prefs.askedNotifications = true
             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -203,6 +211,12 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Радио играло, а сервиса нет — систему остановила его. Подскажем, что настроить.
+        val hb = Prefs.playHeartbeat
+        if (hb > 0 && !PlaybackService.running) {
+            killedAt = java.text.SimpleDateFormat("HH:mm", L.locale()).format(java.util.Date(hb))
+            Prefs.playHeartbeat = 0
+        }
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val f = MediaController.Builder(this, token).buildAsync()
         controllerFuture = f
@@ -393,7 +407,23 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
         searchQuery = track
     }
 
+    private fun shareTrack(track: String, station: String) {
+        try {
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, L.s(R.string.share_text, track, station)),
+                    L.s(R.string.share),
+                )
+            )
+        } catch (_: Exception) {
+        }
+    }
+
     private fun openSearch(service: String, q: String) {
+        if (service == "share") {
+            shareTrack(q, History.items.value.firstOrNull { it.track == q }?.station ?: L.s(R.string.app_name))
+            return
+        }
         val enc = Uri.encode(q)
         val tries = when (service) {
             "ytmusic" -> listOf("https://music.youtube.com/search?q=$enc")
@@ -449,6 +479,36 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
             com.gaifd.carradio.playback.RadioWidget.refresh(this@MainActivity)
         }
 
+        // Первый запуск: язык → страна → фон → машина.
+        if (!settings.onboarded) {
+            Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
+                Onboarding(
+                    settings = settings,
+                    sys = SystemStatus(batteryOk, notificationsOk, bluetoothOk, carLinked),
+                    onNotifications = ::fixNotifications,
+                    onBattery = ::fixBattery,
+                    onPickCar = ::pickCar,
+                    onFinish = {
+                        if (settings.country.isBlank()) {
+                            val c = com.gaifd.carradio.data.Country.current(this@MainActivity)
+                            Prefs.update { it.copy(country = c) }
+                        }
+                        Prefs.update { it.copy(onboarded = true) }
+                        tab = if (stations.isEmpty()) 1 else 0
+                    },
+                )
+            }
+            if (showCarPicker) {
+                CarPickerDialog(
+                    devices = bondedDevices(),
+                    current = settings.carMac,
+                    onPick = ::chooseCar,
+                    onDismiss = { showCarPicker = false },
+                )
+            }
+            return
+        }
+
         if (showDrive) {
             BackHandler { showDrive = false }
             Box(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding()) {
@@ -477,6 +537,8 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
                         history = history,
                         batteryOk = batteryOk,
                         onFixBattery = ::fixBattery,
+                        killedAt = killedAt,
+                        onKilled = { killedAt = null; tab = 3 },
                         onPlay = ::playStation,
                         onToggle = ::toggle,
                         onPrev = { controller?.seekToPreviousMediaItem() },

@@ -315,6 +315,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     override fun handleRelease(): ListenableFuture<*> {
         if (RadioBus.control === this) RadioBus.control = null
+        Prefs.playHeartbeat = 0
         try {
             cm.unregisterNetworkCallback(netCallback)
         } catch (_: Exception) {
@@ -376,6 +377,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun pausePlayback() {
         userPlay = false
+        Prefs.playHeartbeat = 0
         pendingSwitch?.let { handler.removeCallbacks(it) }
         pendingSwitch = null
         cancelIncoming()
@@ -821,6 +823,7 @@ class CrossfadePlayer(private val ctx: Context) : SimpleBasePlayer(Looper.getMai
 
     private fun onTick() {
         ticks++
+        if (ticks % 20 == 0) Prefs.playHeartbeat = if (userPlay) System.currentTimeMillis() else 0L
         if (ticks % 10 == 0) {
             Traffic.flush()
             Stats.flush()
