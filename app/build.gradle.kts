@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.gaifd.carradio"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.gaifd.carradio"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 14
-        versionName = "1.3.0"
+        targetSdk = 36
+        versionCode = 15
+        versionName = "1.3.1"
     }
 
     // Постоянный ключ: каждая новая сборка ставится поверх старой, станции и настройки сохраняются.
@@ -26,14 +26,46 @@ android {
         }
     }
 
+    // Ключ загрузки для Google Play: секретный, хранится в GitHub Secrets, в репозиторий не попадает.
+    val playKeystore = System.getenv("PLAY_KEYSTORE_FILE")
+    if (playKeystore != null) {
+        signingConfigs.create("play") {
+            storeFile = file(playKeystore)
+            storePassword = System.getenv("PLAY_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("PLAY_KEY_ALIAS") ?: "upload"
+            keyPassword = System.getenv("PLAY_KEYSTORE_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("stable")
+            // Ключ задаётся в сборке: github — открытый stable, play — секретный ключ загрузки.
         }
         debug {
             signingConfig = signingConfigs.getByName("stable")
+        }
+    }
+
+    // Две сборки из одного кода:
+    //  github — как раньше: APK с GitHub, обновления внутри приложения;
+    //  play   — для Google Play: без своей «обновлялки» и без прямого запроса снятия ограничения батареи (правила Play).
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+            buildConfigField("boolean", "IN_APP_UPDATES", "true")
+            buildConfigField("boolean", "DIRECT_BATTERY_REQUEST", "true")
+            signingConfig = signingConfigs.getByName("stable")
+        }
+        create("play") {
+            dimension = "store"
+            // Своё приложение рядом с GitHub-версией: другой идентификатор, название «Стрілка».
+            applicationId = "com.gaifd.strilka"
+            buildConfigField("boolean", "IN_APP_UPDATES", "false")
+            buildConfigField("boolean", "DIRECT_BATTERY_REQUEST", "false")
+            signingConfigs.findByName("play")?.let { signingConfig = it }
         }
     }
 

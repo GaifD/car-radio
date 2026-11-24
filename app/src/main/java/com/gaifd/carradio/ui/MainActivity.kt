@@ -2,6 +2,7 @@ package com.gaifd.carradio.ui
 
 import com.gaifd.carradio.R
 import com.gaifd.carradio.L
+import com.gaifd.carradio.BuildConfig
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -166,7 +167,7 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
             pickLogoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
         // Обновления проверяем не чаще раза в 12 часов, тихо.
-        if (System.currentTimeMillis() - Prefs.lastUpdateCheck > 12 * 3600_000L) {
+        if (BuildConfig.IN_APP_UPDATES && System.currentTimeMillis() - Prefs.lastUpdateCheck > 12 * 3600_000L) {
             Prefs.lastUpdateCheck = System.currentTimeMillis()
             lifecycleScope.launch { Updater.check() }
         }
@@ -291,6 +292,11 @@ class MainActivity : androidx.appcompat.app.AppCompatActivity() {
 
     @SuppressLint("BatteryLife")
     private fun fixBattery() {
+        if (!BuildConfig.DIRECT_BATTERY_REQUEST) {
+            // Версия для Play: открываем свойства приложения → «Батарея» → «Без ограничений».
+            openAppSettings()
+            return
+        }
         try {
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         } catch (_: Exception) {

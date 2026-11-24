@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Сгенерировано tools/play_name.py: название для Google Play -->
+<resources>
+    <string name="app_name">Strilka</string>
+    <string name="main_006">This isn\'t a Strilka stations file</string>
+    <string name="player_002">Strilka</string>
+    <string name="set_087">App info → Battery → “Unrestricted”. And in Settings → Battery → Background usage limits → add “Strilka” to never sleeping apps.</string>
+    <string name="set_088">Strilka %1$s</string>
+    <string name="set_103">If Android asks, allow installs from “Strilka”. Your stations and settings will be kept.</string>
+    <string name="voice_001">Add stations to Strilka first</string>
+    <string name="dev_xiaomi">App info → Autostart — turn on. Then Battery saver → “No restrictions”. In Recent apps, pull Strilka down and lock it.</string>
+    <string name="dev_huawei">Settings → Battery → App launch → Strilka: turn off “Manage automatically” and turn on all three switches (auto-launch, secondary launch, run in background).</string>
+    <string name="dev_vivo">Settings → Battery → High background power consumption → turn on for Strilka. And in i Manager → Autostart — turn on.</string>
+</resources>

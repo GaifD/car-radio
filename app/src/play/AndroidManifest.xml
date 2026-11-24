@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Google Play: убираем то, что Play не разрешает такому приложению. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- обновления приходят через Play, своя установка APK запрещена -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
+    <!-- прямой запрос «снять ограничение батареи» — только для узкого круга приложений; ведём в настройки -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" tools:node="remove" />
+
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            tools:node="remove" />
+    </application>
+</manifest>
