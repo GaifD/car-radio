@@ -323,9 +323,11 @@ fun SettingsScreen(
         Spacer(Modifier.height(10.dp))
         TrafficCard()
 
-        // ---- Обновления ----
-        Spacer(Modifier.height(10.dp))
-        UpdatesCard(onCheckUpdate, onDownloadUpdate, onInstallUpdate)
+        // ---- Обновления (в версии для Play их делает сам Play) ----
+        if (BuildConfig.IN_APP_UPDATES) {
+            Spacer(Modifier.height(10.dp))
+            UpdatesCard(onCheckUpdate, onDownloadUpdate, onInstallUpdate)
+        }
 
         // ---- Станции ----
         Spacer(Modifier.height(10.dp))
